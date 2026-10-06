@@ -57,3 +57,7 @@
 
 Если `CHANNEL_URL` не указан, приложение автоматически построит ссылку из `CHANNEL_USERNAME`.
 Реферальная ссылка имеет вид `https://t.me/BOT_USERNAME?start=ID`. Бот получает `/start ID`, сохраняет пригласившего и выдаёт кнопку открытия Mini App с `startapp=ID`. После подтверждения подписки приглашённого реферер получает 100 монет один раз.
+
+
+### Channel/referral setup
+Set `CHANNEL_USERNAME` (for public channels) or `CHANNEL_CHAT_ID` (for private channels). The bot must be an administrator/member of the channel so `getChatMember` can verify subscriptions. Referral links use `https://t.me/<BOT_USERNAME>?start=<USER_ID>`; the bot stores the referrer and passes it into the Mini App.

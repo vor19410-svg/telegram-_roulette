@@ -12,9 +12,10 @@ const db = new Database(process.env.DB_FILE || path.join(__dirname, 'roulette.db
 const PORT = Number(process.env.PORT || 3000);
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ADMIN_ID = String(process.env.ADMIN_TELEGRAM_ID || '');
-const BOT_USERNAME = process.env.BOT_USERNAME || '';
-const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
-const CHANNEL_URL = process.env.CHANNEL_URL || '';
+const BOT_USERNAME = String(process.env.BOT_USERNAME || '').replace(/^@/,'').replace(/^https?:\/\/t\.me\//,'').replace(/\/$/,'');
+const CHANNEL_USERNAME = String(process.env.CHANNEL_USERNAME || '').trim();
+const CHANNEL_CHAT_ID = String(process.env.CHANNEL_CHAT_ID || '').trim();
+const CHANNEL_URL = String(process.env.CHANNEL_URL || '').trim();
 const EFFECTIVE_CHANNEL_URL = CHANNEL_URL || (CHANNEL_USERNAME ? `https://t.me/${CHANNEL_USERNAME.replace(/^@/,'')}` : '');
 const WEBAPP_URL = process.env.WEBAPP_URL || '';
 
@@ -162,11 +163,15 @@ async function tg(method, body={}){
   return j.result;
 }
 async function isSubscribed(userId){
-  if(!CHANNEL_USERNAME) return false;
-  try {
-    const m=await tg('getChatMember',{chat_id:CHANNEL_USERNAME,user_id:Number(userId)});
+  const chatId=CHANNEL_CHAT_ID || CHANNEL_USERNAME;
+  if(!chatId) return false;
+  try{
+    const m=await tg('getChatMember',{chat_id:chatId,user_id:Number(userId)});
     return ['member','administrator','creator'].includes(m.status) || (m.status==='restricted' && m.is_member);
-  } catch { return false; }
+  }catch(e){
+    console.error('Subscription check failed:',e?.message||e);
+    return false;
+  }
 }
 async function notifyAdmin(text){
   if(!ADMIN_ID) return;
@@ -176,11 +181,17 @@ function upsertUser(tgUser, referralId){
   const t=now();
   const existing=db.prepare('SELECT * FROM users WHERE id=?').get(tgUser.id);
   if(existing){
-    db.prepare('UPDATE users SET username=?, first_name=?, updated_at=? WHERE id=?').run(tgUser.username||'',tgUser.first_name||'',t,tgUser.id);
+    let ref=null;
+    if(referralId && /^\d+$/.test(String(referralId)) && Number(referralId)!==Number(tgUser.id) && db.prepare('SELECT id FROM users WHERE id=?').get(Number(referralId))) ref=Number(referralId);
+    if(ref && !existing.referred_by){
+      db.prepare('UPDATE users SET username=?, first_name=?, referred_by=?, updated_at=? WHERE id=?').run(tgUser.username||'',tgUser.first_name||'',ref,t,tgUser.id);
+    } else {
+      db.prepare('UPDATE users SET username=?, first_name=?, updated_at=? WHERE id=?').run(tgUser.username||'',tgUser.first_name||'',t,tgUser.id);
+    }
     return db.prepare('SELECT * FROM users WHERE id=?').get(tgUser.id);
   }
   let ref=null;
-  if(referralId && Number(referralId)!==Number(tgUser.id) && db.prepare('SELECT id FROM users WHERE id=?').get(Number(referralId))) ref=Number(referralId);
+  if(referralId && /^\d+$/.test(String(referralId)) && Number(referralId)!==Number(tgUser.id) && db.prepare('SELECT id FROM users WHERE id=?').get(Number(referralId))) ref=Number(referralId);
   db.prepare('INSERT INTO users(id,username,first_name,referred_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(tgUser.id,tgUser.username||'',tgUser.first_name||'',ref,t,t);
   return db.prepare('SELECT * FROM users WHERE id=?').get(tgUser.id);
 }
@@ -197,15 +208,26 @@ function requireAdmin(req,res){
   return x;
 }
 
-app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!CHANNEL_USERNAME,webappConfigured:!!WEBAPP_URL}));
+app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!(CHANNEL_CHAT_ID||CHANNEL_USERNAME),webappConfigured:!!WEBAPP_URL}));
+app.get('/api/channel-status',async (req,res)=>{
+  const chatId=CHANNEL_CHAT_ID||CHANNEL_USERNAME;
+  if(!chatId) return res.status(400).json({ok:false,error:'CHANNEL_USERNAME или CHANNEL_CHAT_ID не настроен'});
+  try{
+    const me=await tg('getMe',{});
+    const chat=await tg('getChat',{chat_id:chatId});
+    const botMember=await tg('getChatMember',{chat_id:chatId,user_id:me.id});
+    res.json({ok:true,chat:{id:chat.id,title:chat.title,username:chat.username||''},botStatus:botMember.status});
+  }catch(e){res.status(400).json({ok:false,error:e?.message||'Не удалось проверить канал'});}
+});
 
 app.get('/api/config',(req,res)=>{
-  res.json({channelUrl:EFFECTIVE_CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
+  res.json({channelUrl:EFFECTIVE_CHANNEL_URL,channelUsername:CHANNEL_USERNAME,channelChatId:CHANNEL_CHAT_ID,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
 });
 
 app.get('/api/me',(req,res)=>{
   const x=requireUser(req,res); if(!x) return;
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(x.tgUser.id);
+  maybeRewardReferral(u.id);
   db.prepare("UPDATE codes SET status='expired',updated_at=? WHERE user_id=? AND status='pending' AND expires_at<=?").run(now(),u.id,now());
   const lastFree=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' ORDER BY created_at DESC LIMIT 1").get(u.id)?.created_at||0;
   const paidSince=now()-86400;
@@ -401,8 +423,9 @@ async function pollBot(){
       if(!m?.text) continue;
       const chatId=m.chat.id;
       if(m.text.startsWith('/start')){
-        const parts=m.text.split(' ');
-        const ref=parts[1]||'';
+        const parts=m.text.trim().split(/\s+/);
+        const rawRef=parts[1]||'';
+        const ref=rawRef.startsWith('ref_')?rawRef.slice(4):rawRef;
         upsertUser(m.from,ref);
         const miniUrl = WEBAPP_URL
           ? `${WEBAPP_URL}${WEBAPP_URL.includes('?')?'&':'?'}startapp=${encodeURIComponent(ref||'')}`
