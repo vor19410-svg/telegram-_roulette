@@ -255,16 +255,8 @@ tg?.ready(); tg?.expand();
 const initData=tg?.initData||'';
 let me=null,cfg=null;
 
-function referralFromUrl(){
-  try{
-    const p=new URLSearchParams(location.search);
-    return p.get('ref') || p.get('startapp') || tg?.initDataUnsafe?.start_param || '';
-  }catch(e){ return ''; }
-}
 async function api(path,opts={}){
   opts.headers={...(opts.headers||{}),'Content-Type':'application/json','X-Telegram-Init-Data':initData};
-  const ref=referralFromUrl();
-  if(ref) opts.headers['X-Referral-Id']=String(ref).replace(/^ref_/,'');
   const r=await fetch(path,opts);
   const raw=await r.text();
   let j={}; try{j=raw?JSON.parse(raw):{}}catch(e){}
@@ -539,7 +531,7 @@ async function loadMe(){
     document.getElementById('avatar').textContent=(me.user.first_name||'EP').slice(0,2).toUpperCase();
     document.getElementById('adminBadge').classList.toggle('hidden',!me.admin);
     document.getElementById('refCount').textContent=me.referralCount??0;
-    document.getElementById('refLink').value=cfg?.botUsername?`https://t.me/${String(cfg.botUsername).replace(/^@/,'').replace(/^https?:\\/\\/t\\.me\\//,'').replace(/\\/$/,'')}?start=${encodeURIComponent(me.user.id)}`:'BOT_USERNAME не настроен';
+    document.getElementById('refLink').value=cfg?.botUsername?`https://t.me/${cfg.botUsername}?start=${me.user.id}`:'BOT_USERNAME не настроен';
     document.getElementById('profileName').textContent=me.user.first_name||'—';
     document.getElementById('profileId').textContent=me.user.id||'—';
     document.getElementById('profileCoins').textContent=(me.user.coins??0)+' 🪙';
@@ -553,8 +545,8 @@ async function loadMe(){
   }catch(e){toast(e.message)}
 }
 function openChannel(){
-  const url=cfg?.channelUrl || (cfg?.channelUsername?`https://t.me/${String(cfg.channelUsername).replace(/^@/,'')}`:''); if(!url){toast('Ссылка на канал не настроена');return}
-  if(tg?.openTelegramLink) tg.openTelegramLink(url); else window.open(url,'_blank');
+  if(!cfg?.channelUrl){toast('Ссылка на канал не настроена');return}
+  if(tg?.openTelegramLink) tg.openTelegramLink(cfg.channelUrl); else window.open(cfg.channelUrl,'_blank');
 }
 async function claimChannel(){
   try{const j=await api('/api/task/channel/claim',{method:'POST'});toast(`Задание выполнено. +${j.reward} 🪙`);loadMe()}
