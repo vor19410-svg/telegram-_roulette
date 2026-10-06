@@ -1,1 +1,223 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Elite Player — Telegram Mini App</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+:root{
+  --bg:#06050b;--panel:#0d0a15;--panel2:#141020;--line:#3a2855;
+  --purple:#6e1fe0;--purple2:#a54cff;--gold:#f3c62b;--gold2:#ffe98b;
+  --muted:#aaa3b4;--text:#fff;--green:#65e58b;--danger:#ff5f6d;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:radial-gradient(circle at 50% -10%,#241044 0,#0b0711 36%,#050409 75%);color:var(--text);font-family:Arial,Helvetica,sans-serif}
+body{min-height:100vh;padding-bottom:88px}
+button,input{font:inherit}
+button{border:0;color:#fff;font-weight:800;border-radius:12px;min-height:46px;padding:12px 14px;cursor:pointer}
+button:disabled{opacity:.45;cursor:not-allowed}
+.wrap{width:min(100%,520px);margin:auto;padding:12px 13px 22px}
+.top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.brand{font-size:21px;font-weight:900;letter-spacing:.2px}
+.brand span{color:var(--gold)}
+.balance{padding:9px 12px;border:1px solid var(--line);border-radius:13px;background:#100b19}
+.balance small{display:block;color:var(--muted);font-size:10px}.balance b{font-size:18px;color:var(--gold)}
+.profile{display:flex;align-items:center;gap:10px;padding:11px;border:1px solid var(--line);border-radius:16px;background:linear-gradient(135deg,#171022,#0e0a15);box-shadow:0 10px 28px #0007}
+.avatar{width:44px;height:44px;border-radius:12px;background:linear-gradient(145deg,#c89b31,#5c3d12);display:grid;place-items:center;font-weight:900;color:#fff4bd;border:1px solid #e5bd52}
+.profile small{display:block;color:var(--muted);margin-top:3px}
+.badge{margin-left:auto;padding:5px 8px;border-radius:8px;background:#2b1550;color:#e0b9ff;font-size:10px}
+.card{margin-top:11px;padding:14px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,#120d1d,#0a0710);box-shadow:0 10px 30px #0007}
+.hero{text-align:center}
+.kicker{color:var(--muted);font-size:12px}
+.title{font-size:22px;font-weight:900;margin:3px 0 4px}
+.subtitle{color:var(--muted);font-size:12px}
+.wheelWrap{position:relative;width:min(86vw,360px);aspect-ratio:1;margin:14px auto 10px}
+.wheel{
+  position:absolute;inset:0;border-radius:50%;
+  background:
+    conic-gradient(from -22.5deg,
+      #7025aa 0 12.5%,#4a2375 12.5% 25%,#912ca8 25% 37.5%,#35205b 37.5% 50%,
+      #7d239b 50% 62.5%,#2a1949 62.5% 75%,#6a1f98 75% 87.5%,#21152f 87.5% 100%);
+  border:7px solid #b98318;box-shadow:0 0 0 3px #f5d46b55,0 0 30px #7c27de66,inset 0 0 25px #000;
+}
+.wheel:before{content:"";position:absolute;inset:15px;border-radius:50%;border:1px solid #f6d56a66}
+.segment{position:absolute;left:50%;top:50%;width:72px;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;text-align:center;color:#fff;line-height:1.05;text-shadow:0 2px 4px #000;transform:translate(-50%,-50%);z-index:2}
+.s1{left:50%;top:21%}.s2{left:73%;top:29%}.s3{left:79%;top:50%}.s4{left:72%;top:72%}
+.s5{left:50%;top:80%}.s6{left:28%;top:72%}.s7{left:21%;top:50%}.s8{left:28%;top:29%}
+.pointer{position:absolute;z-index:4;top:-3px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;border-top:30px solid var(--gold);filter:drop-shadow(0 2px 3px #000)}
+.center{position:absolute;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);width:78px;height:78px;border-radius:50%;display:grid;place-items:center;text-align:center;background:radial-gradient(circle at 35% 30%,#ffe96b,#c98e0b);color:#241700;border:5px solid #8d6210;font-size:12px;font-weight:900;box-shadow:0 5px 18px #000b}
+.note{font-size:11px;color:var(--muted);line-height:1.4}
+.demo{border:1px dashed #8f6d22;background:#171109;color:#f5d66c;padding:9px;border-radius:10px;font-size:11px;margin-top:10px}
+.actions{display:grid;gap:8px;margin-top:10px}
+.primary{background:linear-gradient(135deg,#8b2cf5,#4e14a8);box-shadow:0 7px 18px #681bd744}
+.secondary{background:#1a1325;border:1px solid #4a3561}
+.sectionTitle{display:flex;justify-content:space-between;align-items:center}
+.sectionTitle h2{margin:0;font-size:20px}
+.item{margin-top:9px;padding:12px;border:1px solid #352645;border-radius:13px;background:#100b18}
+.row{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.small{font-size:12px;color:var(--muted);line-height:1.45}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
+.input{width:100%;background:#09070d;border:1px solid #49335f;color:#fff;border-radius:10px;padding:11px}
+.code{font-family:monospace;font-size:18px;font-weight:900;color:var(--gold2);border:1px dashed #b8922f;border-radius:10px;padding:10px;text-align:center;margin-top:8px;background:#0c0910}
+.hidden{display:none!important}
+.nav{position:fixed;z-index:20;left:50%;bottom:8px;transform:translateX(-50%);width:min(calc(100% - 20px),500px);display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:7px;border:1px solid #3b2b4d;border-radius:18px;background:#0b0811eF;backdrop-filter:blur(12px);box-shadow:0 10px 35px #000b}
+.nav button{min-height:52px;padding:6px 4px;background:transparent;color:#a9a1b1;font-size:10px}
+.nav button.active{background:linear-gradient(180deg,#33145e,#1a0c2e);color:#fff;border:1px solid #4d2b6c}
+.icon{font-size:17px;display:block;margin-bottom:2px}
+.toast{position:fixed;z-index:50;left:14px;right:14px;bottom:82px;background:#1a1026;border:1px solid #70409a;border-radius:12px;padding:12px;text-align:center;display:none;box-shadow:0 8px 30px #0009}
+@media(max-width:360px){.brand{font-size:18px}.wheelWrap{width:300px}.nav button{font-size:9px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div class="brand"><span>ELITE</span> PLAYER</div>
+    <div class="balance"><small>Баланс</small><b id="coins">0</b> 🪙</div>
+  </div>
 
+  <div class="profile">
+    <div class="avatar" id="avatar">EP</div>
+    <div><b id="playerName">Elite Player</b><small id="playerId">ID: —</small></div>
+    <div id="adminBadge" class="badge hidden">👑 ADMIN</div>
+  </div>
+
+  <section id="home" class="card">
+    <div class="hero">
+      <div class="kicker">MINI APP</div>
+      <div class="title">Колесо наград</div>
+      <div class="subtitle">Интерфейс в стиле исходного макета</div>
+
+      <div class="wheelWrap">
+        <div class="pointer"></div>
+        <div class="wheel">
+          <div class="segment s1">150<br>🪙</div>
+          <div class="segment s2">100<br>🪙</div>
+          <div class="segment s3">СКИДКА<br>25%</div>
+          <div class="segment s4">50<br>🪙</div>
+          <div class="segment s5">НИЧЕГО</div>
+          <div class="segment s6">60<br>UC</div>
+          <div class="segment s7">100<br>🪙</div>
+          <div class="segment s8">150<br>🪙</div>
+        </div>
+        <div class="center">VIEW</div>
+      </div>
+
+      <div class="actions">
+        <button class="primary" onclick="toast('Интерфейс открыт')">Открыть</button>
+        <button class="secondary" onclick="show('tasks')">Перейти к заданиям</button>
+      </div>
+    </div>
+  </section>
+
+  <section id="tasks" class="card hidden">
+    <div class="sectionTitle"><h2>📋 Задания</h2></div>
+    <div class="item">
+      <b>📢 Подписка на канал</b>
+      <div class="small">Проверь подписку после перехода в Telegram-канал.</div>
+      <div class="grid"><button class="primary" onclick="openChannel()">Перейти</button><button class="secondary" onclick="claimChannel()">Проверить</button></div>
+    </div>
+  </section>
+
+  <section id="ref" class="card hidden">
+    <div class="sectionTitle"><h2>👥 Реферальная система</h2></div>
+    <div class="item"><b>Твоя ссылка</b><input id="refLink" class="input" readonly><button class="primary" style="width:100%;margin-top:8px" onclick="copyRef()">Скопировать ссылку</button></div>
+    <div class="item"><b>Как это работает</b><div class="small">Ссылка содержит твой Telegram ID. Сервер может использовать её для привязки приглашённого пользователя к пригласившему.</div></div>
+  </section>
+
+  <section id="exchange" class="card hidden">
+    <div class="sectionTitle"><h2>💱 Обмен</h2></div>
+    <div class="item"><b id="exchangeUcTitle">Обмен UC</b><div class="small">Раздел интерфейса сохранён для твоего проекта. Реальная выдача призов отключена в этой версии.</div></div>
+    <div class="item"><b id="exchangeDiscountTitle">Скидка</b><div class="small">Здесь можно разместить безопасную систему промокодов/награды без азартной механики.</div></div>
+  </section>
+
+  <section id="profile" class="card hidden">
+    <div class="sectionTitle"><h2>👤 Профиль</h2></div>
+    <div class="item"><div class="row"><span>Имя</span><b id="profileName">—</b></div></div>
+    <div class="item"><div class="row"><span>Telegram ID</span><b id="profileId">—</b></div></div>
+    <div class="item"><div class="row"><span>Баланс</span><b id="profileCoins">0 🪙</b></div></div>
+  </section>
+
+  <section id="admin" class="card hidden">
+    <div class="sectionTitle"><h2>👑 Админка</h2></div>
+    <div id="stats"></div>
+    <div class="item"><div class="small">Визуальная админ-панель сохранена как оболочка. Азартные настройки и вероятности намеренно не подключены.</div></div>
+  </section>
+</div>
+
+<nav class="nav">
+  <button id="navHome" class="active" onclick="show('home')"><span class="icon">⌂</span>Главная</button>
+  <button id="navTasks" onclick="show('tasks')"><span class="icon">▣</span>Задания</button>
+  <button id="navRef" onclick="show('ref')"><span class="icon">♟</span>Рефералы</button>
+  <button id="navProfile" onclick="show('profile')"><span class="icon">◉</span>Профиль</button>
+</nav>
+
+<div id="toast" class="toast"></div>
+
+<script>
+const tg=window.Telegram?.WebApp;
+tg?.ready(); tg?.expand();
+const initData=tg?.initData||'';
+let me=null,cfg=null;
+
+async function api(path,opts={}){
+  opts.headers={...(opts.headers||{}),'Content-Type':'application/json','X-Telegram-Init-Data':initData};
+  const r=await fetch(path,opts);
+  const raw=await r.text();
+  let j={}; try{j=raw?JSON.parse(raw):{}}catch(e){}
+  if(!r.ok) throw new Error(j?.error||`Ошибка сервера (${r.status})`);
+  return j;
+}
+function toast(s){const e=document.getElementById('toast');e.textContent=s;e.style.display='block';clearTimeout(window.__t);window.__t=setTimeout(()=>e.style.display='none',2600)}
+function show(id){
+  document.querySelectorAll('section').forEach(x=>x.classList.add('hidden'));
+  document.getElementById(id)?.classList.remove('hidden');
+  document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));
+  const map={home:'navHome',tasks:'navTasks',ref:'navRef',profile:'navProfile'};
+  if(map[id]) document.getElementById(map[id]).classList.add('active');
+  if(id==='profile') renderProfile();
+}
+function renderProfile(){
+  if(!me?.user)return;
+  document.getElementById('profileName').textContent=me.user.first_name||'—';
+  document.getElementById('profileId').textContent=me.user.id||'—';
+  document.getElementById('profileCoins').textContent=(me.user.coins??0)+' 🪙';
+}
+async function loadMe(){
+  try{
+    if(!initData){toast('Открой приложение через Telegram Mini App');return}
+    me=await api('/api/me');
+    try{cfg=await (await fetch('/api/config')).json()}catch(e){cfg={}}
+    document.getElementById('coins').textContent=me.user.coins??0;
+    document.getElementById('playerName').textContent=me.user.first_name||'Elite Player';
+    document.getElementById('playerId').textContent='ID: '+(me.user.id||'—');
+    document.getElementById('avatar').textContent=(me.user.first_name||'EP').slice(0,2).toUpperCase();
+    document.getElementById('adminBadge').classList.toggle('hidden',!me.admin);
+    document.getElementById('refLink').value=cfg?.botUsername?`https://t.me/${cfg.botUsername}?start=${me.user.id}`:'BOT_USERNAME не настроен';
+    document.getElementById('profileName').textContent=me.user.first_name||'—';
+    document.getElementById('profileId').textContent=me.user.id||'—';
+    document.getElementById('profileCoins').textContent=(me.user.coins??0)+' 🪙';
+    if(me.admin){
+      document.getElementById('admin').classList.remove('hidden');
+      const s=await api('/api/admin/stats').catch(()=>null);
+      if(s) document.getElementById('stats').innerHTML=`<div class="grid"><div class="item">Пользователи<br><b>${s.users}</b></div><div class="item">Прокруты<br><b>${s.spins}</b></div><div class="item">Монеты<br><b>${s.coins}</b></div><div class="item">Ожидают<br><b>${s.pendingCodes}</b></div></div>`;
+    }
+  }catch(e){toast(e.message)}
+}
+function openChannel(){
+  if(!cfg?.channelUrl){toast('Ссылка на канал не настроена');return}
+  if(tg?.openTelegramLink) tg.openTelegramLink(cfg.channelUrl); else window.open(cfg.channelUrl,'_blank');
+}
+async function claimChannel(){
+  try{const j=await api('/api/task/channel/claim',{method:'POST'});toast(`Задание выполнено. +${j.reward} 🪙`);loadMe()}
+  catch(e){toast(e.message)}
+}
+function copyRef(){
+  const v=document.getElementById('refLink').value;
+  navigator.clipboard?.writeText(v);
+  toast('Ссылка скопирована');
+}
+loadMe();
+</script>
+</body>
+</html>
