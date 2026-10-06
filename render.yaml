@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: elite-force-roulette
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: BOT_TOKEN
+        sync: false
+      - key: ADMIN_TELEGRAM_ID
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      - key: CHANNEL_USERNAME
+        sync: false
+      - key: CHANNEL_URL
+        sync: false
+      - key: WEBAPP_URL
+        sync: false
