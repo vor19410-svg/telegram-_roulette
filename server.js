@@ -73,8 +73,6 @@ CREATE TABLE IF NOT EXISTS settings (
 );
 `);
 
-const CODE_VALID_DAYS = 10;
-
 const defaults = {
   free_spin_hours: '24',
   paid_spin_cost: '100',
@@ -82,7 +80,7 @@ const defaults = {
   code_days: '10',
   exchange_coins: '3500',
   exchange_uc: '60',
-  exchange_discount_coins: '900',
+  exchange_discount_coins: '800',
   exchange_discount_percent: '25',
   referral_reward: '100',
   channel_reward: '50',
@@ -231,7 +229,7 @@ app.post('/api/spin',(req,res)=>{
   if(result.kind==='code'){
     const prefix=result.id==='uc60'?'UC':'SALE';
     code=randomCode(prefix);
-    const expires=t+CODE_VALID_DAYS*86400;
+    const expires=t+setting('code_days')*86400;
     db.prepare('INSERT INTO codes(code,user_id,reward_type,reward_value,source,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
       .run(code,u.id,result.id,result.value,'spin',expires,t,t);
     if(result.id==='uc60') db.prepare("UPDATE settings SET value=CAST(value AS REAL)-1 WHERE key='uc_roulette_inventory' AND CAST(value AS REAL)>0").run();
@@ -241,7 +239,7 @@ app.post('/api/spin',(req,res)=>{
     db.prepare('UPDATE users SET first_spin_done=1,updated_at=? WHERE id=?').run(t,u.id);
     maybeRewardReferral(u.id,t);
   }
-  res.json({result:{...result,code,expiresAt:code?t+CODE_VALID_DAYS*86400:null},coins:db.prepare('SELECT coins FROM users WHERE id=?').get(u.id).coins});
+  res.json({result:{...result,code,expiresAt:code?t+setting('code_days')*86400:null},coins:db.prepare('SELECT coins FROM users WHERE id=?').get(u.id).coins});
 });
 
 app.post('/api/task/channel/claim',async (req,res)=>{
@@ -285,7 +283,7 @@ app.post('/api/exchange', (req,res)=>{
   }
   if(u.coins<cost) return res.status(400).json({error:`Нужно ${cost} монет`});
   const t=now(), code=randomCode(prefix);
-  const expires=t+CODE_VALID_DAYS*86400;
+  const expires=t+setting('code_days')*86400;
   const tx=db.transaction(()=>{
     db.prepare('UPDATE users SET coins=coins-?,updated_at=? WHERE id=?').run(cost,t,u.id);
     db.prepare('INSERT INTO codes(code,user_id,reward_type,reward_value,source,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').run(code,u.id,rewardType,rewardValue,'exchange',expires,t,t);
@@ -334,7 +332,15 @@ app.post('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
   const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_nothing','uc_roulette_inventory'];
   const update=db.prepare('UPDATE settings SET value=? WHERE key=?');
-  for(const k of allowed) if(req.body[k]!==undefined) update.run(String(req.body[k]),k);
+  for(const k of allowed){
+    if(req.body[k]===undefined) continue;
+    const n=Number(req.body[k]);
+    if(!Number.isFinite(n)) return res.status(400).json({error:`Некорректное значение: ${k}`});
+    if(['exchange_discount_coins','exchange_coins','exchange_uc','code_days'].includes(k) && n<1) return res.status(400).json({error:`Значение ${k} должно быть больше 0`});
+    if(k==='exchange_discount_percent' && (n<1 || n>100)) return res.status(400).json({error:'Процент скидки должен быть от 1 до 100'});
+    if(k==='code_days' && n>365) return res.status(400).json({error:'Срок кода не может быть больше 365 дней'});
+    update.run(String(req.body[k]),k);
+  }
   res.json({ok:true});
 });
 app.get('/api/admin/settings',(req,res)=>{

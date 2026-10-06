@@ -162,14 +162,14 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div class="row"><span>💰 Твой баланс</span><b id="exchangeCoins">0 🪙</b></div>
     </div>
     <div class="item">
-      <div class="row"><b>🏷️ Скидка 25%</b><span>800 🪙</span></div>
+      <div class="row"><b>🏷️ Скидка <span id="exchangeDiscountPercent">25</span>%</b><span id="exchangeDiscountCost">800 🪙</span></div>
       <div class="small" style="margin-top:5px">После обмена ты получишь код скидки. Код действует 10 дней с момента получения.</div>
-      <button class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('discount',800)">Обменять за 800 🪙</button>
+      <button id="exchangeDiscountBtn" class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('discount',Number(cfg?.exchangeDiscountCoins||800))">Обменять за 800 🪙</button>
     </div>
     <div class="item">
-      <div class="row"><b>🎮 60 UC</b><span>3500 🪙</span></div>
+      <div class="row"><b>🎮 <span id="exchangeUcAmount">60</span> UC</b><span id="exchangeUcCost">3500 🪙</span></div>
       <div class="small" style="margin-top:5px">После обмена ты получишь код на 60 UC. Код действует 10 дней с момента получения.</div>
-      <button class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('uc60',3500)">Обменять за 3500 🪙</button>
+      <button id="exchangeUcBtn" class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('uc60',Number(cfg?.exchangeCoins||3500))">Обменять за 3500 🪙</button>
     </div>
     <button class="secondary" style="width:100%;margin-top:9px" onclick="show('profile')">← Назад в профиль</button>
   </section>
@@ -185,6 +185,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
     </div>
     <button id="adminOpenBtn" class="primary hidden" style="width:100%;margin-top:9px" onclick="show('admin')">👑 Открыть админку</button>
     <button class="primary" style="width:100%;margin-top:9px" onclick="show('exchange')">🔄 Обмен наград</button>
+    <button id="rewardSettingsBtn" class="primary hidden" style="width:100%;margin-top:9px" onclick="show('rewardSettings');loadRewardSettings()">⚙️ Настройки наград</button>
   </section>
 
   <section id="admin" class="card hidden">
@@ -202,6 +203,24 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <b>🎟️ Коды наград</b>
       <div class="small" style="margin-top:5px">Здесь появляются коды, которые сервер выдал пользователям за награды. Ты можешь отметить код как выданный или аннулировать его.</div>
       <div id="adminCodes" style="margin-top:8px">Загрузка…</div>
+    </div>
+  </section>
+
+  <section id="rewardSettings" class="card hidden">
+    <div class="sectionTitle">
+      <h2>⚙️ Настройки наград</h2>
+      <button class="secondary" onclick="loadRewardSettings()">Обновить</button>
+    </div>
+    <div class="item">
+      <div class="small" style="margin-bottom:10px">Эти настройки доступны только администратору и применяются к новым обменам.</div>
+      <div class="grid">
+        <label>🏷️ Скидка: монет<input id="setDiscountCoins" type="number" min="1"></label>
+        <label>🏷️ Процент скидки<input id="setDiscountPercent" type="number" min="1" max="100"></label>
+        <label>🎮 UC: монет<input id="setUcCoins" type="number" min="1"></label>
+        <label>🎮 Количество UC<input id="setUcAmount" type="number" min="1"></label>
+        <label>⏳ Код действует, дней<input id="setCodeDays" type="number" min="1" max="365"></label>
+      </div>
+      <button class="primary" style="width:100%;margin-top:10px" onclick="saveAdminSettings()">💾 Сохранить настройки</button>
     </div>
   </section>
 </div>
@@ -239,6 +258,7 @@ function show(id){
   if(id==='profile') renderProfile();
   if(id==='exchange') refreshExchangeBalance();
   if(id==='admin') loadAdmin();
+  if(id==='rewardSettings') loadRewardSettings();
 }
 function renderProfile(){
   if(!me?.user)return;
@@ -272,7 +292,12 @@ function renderMyCodes(){
 async function loadAdmin(){
   if(!me?.admin) return;
   try{
-    const [s,c]=await Promise.all([api('/api/admin/stats'),api('/api/admin/codes')]);
+    const [s,c,settings]=await Promise.all([api('/api/admin/stats'),api('/api/admin/codes'),api('/api/admin/settings')]);
+    document.getElementById('setDiscountCoins').value=settings.exchange_discount_coins??800;
+    document.getElementById('setDiscountPercent').value=settings.exchange_discount_percent??25;
+    document.getElementById('setUcCoins').value=settings.exchange_coins??3500;
+    document.getElementById('setUcAmount').value=settings.exchange_uc??60;
+    document.getElementById('setCodeDays').value=settings.code_days??10;
     document.getElementById('stats').innerHTML=`
       <div class="grid">
         <div class="item">Пользователи<br><b>${s.users}</b><div class="small">+${s.newUsers24h} за 24ч</div></div>
@@ -312,6 +337,36 @@ async function loadAdmin(){
     }).join('');
   }catch(e){toast(e.message)}
 }
+async function loadRewardSettings(){
+  if(!me?.admin){ show('profile'); toast('Доступ только для администратора'); return; }
+  try{
+    const settings=await api('/api/admin/settings');
+    document.getElementById('setDiscountCoins').value=settings.exchange_discount_coins??800;
+    document.getElementById('setDiscountPercent').value=settings.exchange_discount_percent??25;
+    document.getElementById('setUcCoins').value=settings.exchange_coins??3500;
+    document.getElementById('setUcAmount').value=settings.exchange_uc??60;
+    document.getElementById('setCodeDays').value=settings.code_days??10;
+  }catch(e){toast(e.message||'Не удалось загрузить настройки');}
+}
+
+async function saveAdminSettings(){
+  try{
+    const payload={
+      exchange_discount_coins:Number(document.getElementById('setDiscountCoins').value),
+      exchange_discount_percent:Number(document.getElementById('setDiscountPercent').value),
+      exchange_coins:Number(document.getElementById('setUcCoins').value),
+      exchange_uc:Number(document.getElementById('setUcAmount').value),
+      code_days:Number(document.getElementById('setCodeDays').value)
+    };
+    if(!payload.exchange_discount_coins||!payload.exchange_coins||!payload.exchange_uc||!payload.code_days){toast('Заполни все поля');return}
+    if(payload.exchange_discount_percent<1||payload.exchange_discount_percent>100){toast('Скидка должна быть от 1 до 100%');return}
+    if(payload.code_days<1||payload.code_days>365){toast('Срок кода: от 1 до 365 дней');return}
+    await api('/api/admin/settings',{method:'POST',body:JSON.stringify(payload)});
+    toast('Настройки сохранены');
+    await loadAdmin();
+  }catch(e){toast(e.message)}
+}
+
 async function setCodeStatus(id,status){
   try{
     await api('/api/admin/codes/'+id+'/status',{method:'POST',body:JSON.stringify({status})});
@@ -368,6 +423,16 @@ async function claimRewardPopup(){
 async function refreshExchangeBalance(){
   const el=document.getElementById('exchangeCoins');
   if(el) el.textContent=(me?.user?.coins??0)+' 🪙';
+  const dc=Number(cfg?.exchangeDiscountCoins||800), dp=Number(cfg?.exchangeDiscountPercent||25);
+  const uc=Number(cfg?.exchangeUc||60), ucCost=Number(cfg?.exchangeCoins||3500);
+  document.getElementById('exchangeDiscountPercent')?.replaceChildren(String(dp));
+  document.getElementById('exchangeDiscountCost')?.replaceChildren(`${dc} 🪙`);
+  document.getElementById('exchangeUcAmount')?.replaceChildren(String(uc));
+  document.getElementById('exchangeUcCost')?.replaceChildren(`${ucCost} 🪙`);
+  const db=document.getElementById('exchangeDiscountBtn');
+  const ub=document.getElementById('exchangeUcBtn');
+  if(db) db.textContent=`Обменять за ${dc} 🪙`;
+  if(ub) ub.textContent=`Обменять за ${ucCost} 🪙`;
 }
 async function exchangeReward(type,cost){
   if((me?.user?.coins??0)<cost){toast(`Нужно ${cost} монет`);return}
@@ -391,6 +456,7 @@ async function loadMe(){
     me=await api('/api/me');
     try{cfg=await (await fetch('/api/config')).json()}catch(e){cfg={}}
     if(cfg) cfg.freeSpinHours=Number(cfg.freeSpinHours||24);
+    refreshExchangeBalance();
     document.getElementById('coins').textContent=me.user.coins??0;
     document.getElementById('playerName').textContent=me.user.first_name||'Elite Player';
     document.getElementById('playerId').textContent='ID: '+(me.user.id||'—');
