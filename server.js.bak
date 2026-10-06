@@ -14,7 +14,6 @@ const BOT_TOKEN = process.env.BOT_TOKEN || '';
 const ADMIN_ID = String(process.env.ADMIN_TELEGRAM_ID || '');
 const BOT_USERNAME = process.env.BOT_USERNAME || '';
 const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
-const CHANNEL_ID = process.env.CHANNEL_ID || '';
 const CHANNEL_URL = process.env.CHANNEL_URL || '';
 const WEBAPP_URL = process.env.WEBAPP_URL || '';
 
@@ -144,7 +143,7 @@ function authInitData(initData){
   const dataCheck = [...p.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>`${k}=${v}`).join('\n');
   const secret = crypto.createHmac('sha256','WebAppData').update(BOT_TOKEN).digest();
   const expected = crypto.createHmac('sha256',secret).update(dataCheck).digest('hex');
-  if(hash.length!==expected.length || !crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(hash))) return null;
+  if(!crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(hash))) return null;
   const authDate = Number(p.get('auth_date')||0);
   if(now()-authDate > 86400) return null;
   try {
@@ -162,10 +161,9 @@ async function tg(method, body={}){
   return j.result;
 }
 async function isSubscribed(userId){
-  const chatId=CHANNEL_ID || CHANNEL_USERNAME;
-  if(!chatId) return false;
+  if(!CHANNEL_USERNAME) return false;
   try {
-    const m=await tg('getChatMember',{chat_id:chatId,user_id:Number(userId)});
+    const m=await tg('getChatMember',{chat_id:CHANNEL_USERNAME,user_id:Number(userId)});
     return ['member','administrator','creator'].includes(m.status) || (m.status==='restricted' && m.is_member);
   } catch { return false; }
 }
@@ -177,13 +175,11 @@ function upsertUser(tgUser, referralId){
   const t=now();
   const existing=db.prepare('SELECT * FROM users WHERE id=?').get(tgUser.id);
   if(existing){
-    let ref=existing.referred_by;
-    if(!ref && referralId && Number(referralId)!==Number(tgUser.id) && Number.isInteger(Number(referralId))) ref=Number(referralId);
-    db.prepare('UPDATE users SET username=?, first_name=?, referred_by=COALESCE(referred_by,?), updated_at=? WHERE id=?').run(tgUser.username||'',tgUser.first_name||'',ref||null,t,tgUser.id);
+    db.prepare('UPDATE users SET username=?, first_name=?, updated_at=? WHERE id=?').run(tgUser.username||'',tgUser.first_name||'',t,tgUser.id);
     return db.prepare('SELECT * FROM users WHERE id=?').get(tgUser.id);
   }
   let ref=null;
-  if(referralId && Number(referralId)!==Number(tgUser.id) && Number.isInteger(Number(referralId))) ref=Number(referralId);
+  if(referralId && Number(referralId)!==Number(tgUser.id) && db.prepare('SELECT id FROM users WHERE id=?').get(Number(referralId))) ref=Number(referralId);
   db.prepare('INSERT INTO users(id,username,first_name,referred_by,created_at,updated_at) VALUES(?,?,?,?,?,?)').run(tgUser.id,tgUser.username||'',tgUser.first_name||'',ref,t,t);
   return db.prepare('SELECT * FROM users WHERE id=?').get(tgUser.id);
 }
@@ -200,18 +196,7 @@ function requireAdmin(req,res){
   return x;
 }
 
-app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!(CHANNEL_ID||CHANNEL_USERNAME),webappConfigured:!!WEBAPP_URL}));
-
-app.get('/api/telegram/diagnostics',async (req,res)=>{
-  const out={botTokenConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!(CHANNEL_ID||CHANNEL_USERNAME),webappConfigured:!!WEBAPP_URL,channelId:CHANNEL_ID||null,channelUsername:CHANNEL_USERNAME||null};
-  try{ const me=await tg('getMe'); out.bot={id:me.id,username:me.username,first_name:me.first_name}; }catch(e){ out.botError=e.message; }
-  try{ const info=await tg('getWebhookInfo'); out.webhook={url:info.url||'',pending_update_count:info.pending_update_count||0,last_error_message:info.last_error_message||'',last_error_date:info.last_error_date||0}; }catch(e){ out.webhookError=e.message; }
-  const chatId=CHANNEL_ID||CHANNEL_USERNAME;
-  if(chatId){
-    try{ const chat=await tg('getChat',{chat_id:chatId}); out.channel={id:chat.id,title:chat.title,username:chat.username||null,type:chat.type}; }catch(e){ out.channelError=e.message; }
-  }
-  res.json(out);
-});
+app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!CHANNEL_USERNAME,webappConfigured:!!WEBAPP_URL}));
 
 app.get('/api/config',(req,res)=>{
   res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
@@ -403,46 +388,31 @@ function maybeRewardReferral(userId,t=now()){
 }
 function escapeHtml(s=''){ return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 
-// Telegram updates: webhook on Render/VPS, polling as a local fallback.
+// Telegram bot polling: convenient for first test. For production use webhook if desired.
 let offset=0;
-async function handleBotUpdate(up){
-  const m=up?.message;
-  if(!m?.text) return;
-  const chatId=m.chat.id;
-  if(m.text.startsWith('/start')){
-    const parts=m.text.trim().split(/\s+/);
-    const ref=parts[1]||'';
-    upsertUser(m.from,ref);
-    const buttons={inline_keyboard:[
-      [{text:'🎰 Открыть рулетку',web_app:{url:WEBAPP_URL}}],
-      [{text:'📢 Подписаться на канал',url:CHANNEL_URL}]
-    ]};
-    await tg('sendMessage',{chat_id:chatId,text:`🎰 <b>Рулетка</b>\n\nДобро пожаловать, ${escapeHtml(m.from.first_name||'игрок')}!\n\nУ тебя есть бесплатный прокрут раз в 24 часа. Выполняй задания и приглашай друзей, чтобы получать дополнительные монеты.`,parse_mode:'HTML',reply_markup:buttons});
-  }
-}
-
-app.post('/telegram/webhook',async (req,res)=>{
-  try{ await handleBotUpdate(req.body); res.sendStatus(200); }
-  catch(e){ res.sendStatus(200); }
-});
-
 async function pollBot(){
-  if(!BOT_TOKEN || WEBAPP_URL) return;
+  if(!BOT_TOKEN) return;
   try{
     const updates=await tg('getUpdates',{offset,timeout:20,allowed_updates:['message']});
-    for(const up of updates){ offset=up.update_id+1; await handleBotUpdate(up); }
+    for(const up of updates){
+      offset=up.update_id+1;
+      const m=up.message;
+      if(!m?.text) continue;
+      const chatId=m.chat.id;
+      if(m.text.startsWith('/start')){
+        const parts=m.text.split(' ');
+        const ref=parts[1]||'';
+        upsertUser(m.from,ref);
+        const buttons={inline_keyboard:[
+          [{text:'🎰 Открыть рулетку',web_app:{url:WEBAPP_URL}}],
+          [{text:'📢 Подписаться на канал',url:CHANNEL_URL}]
+        ]};
+        await tg('sendMessage',{chat_id:chatId,text:`🎰 <b>Рулетка</b>\n\nДобро пожаловать, ${escapeHtml(m.from.first_name||'игрок')}!\n\nУ тебя есть бесплатный прокрут раз в 24 часа. Выполняй задания и приглашай друзей, чтобы получать дополнительные монеты.`,parse_mode:'HTML',reply_markup:buttons});
+      }
+    }
   }catch(e){}
 }
-async function configureTelegramUpdates(){
-  if(!BOT_TOKEN) return;
-  if(WEBAPP_URL){
-    const webhookUrl=`${WEBAPP_URL.replace(/\/$/,'')}/telegram/webhook`;
-    try{ await tg('setWebhook',{url:webhookUrl,allowed_updates:['message']}); console.log(`Telegram webhook set: ${webhookUrl}`); }catch(e){ console.error('Webhook setup failed:',e.message); }
-  }else{
-    try{ await tg('deleteWebhook',{drop_pending_updates:false}); }catch(e){}
-    setInterval(pollBot,1000);
-  }
-}
+setInterval(pollBot,1000);
 
 app.get('*',(req,res)=>res.sendFile(path.join(__dirname,'index.html')));
-app.listen(PORT,()=>{ console.log(`Server started on :${PORT}`); configureTelegramUpdates(); });
+app.listen(PORT,()=>console.log(`Server started on :${PORT}`));
