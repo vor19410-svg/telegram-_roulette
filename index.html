@@ -60,6 +60,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:9px}
 .input{width:100%;background:#09070d;border:1px solid #49335f;color:#fff;border-radius:10px;padding:11px}
 .code{font-family:monospace;font-size:18px;font-weight:900;color:var(--gold2);border:1px dashed #b8922f;border-radius:10px;padding:10px;text-align:center;margin-top:8px;background:#0c0910}
+
+.codeRow{margin-top:8px;padding:10px;border:1px solid #3b2a4d;border-radius:12px;background:#0d0914}
+.codeMeta{font-size:11px;color:var(--muted);line-height:1.45;margin-top:4px}
+.codeActions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
+.statusPending{color:var(--gold2)}.statusIssued{color:var(--green)}.statusCancelled,.statusExpired{color:var(--danger)}
 .hidden{display:none!important}
 .nav{position:fixed;z-index:20;left:50%;bottom:8px;transform:translateX(-50%);width:min(calc(100% - 20px),500px);display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:7px;border:1px solid #3b2b4d;border-radius:18px;background:#0b0811eF;backdrop-filter:blur(12px);box-shadow:0 10px 35px #000b}
 .nav button{min-height:52px;padding:6px 4px;background:transparent;color:#a9a1b1;font-size:10px}
@@ -138,12 +143,24 @@ button:disabled{opacity:.45;cursor:not-allowed}
     <div class="item"><div class="row"><span>Имя</span><b id="profileName">—</b></div></div>
     <div class="item"><div class="row"><span>Telegram ID</span><b id="profileId">—</b></div></div>
     <div class="item"><div class="row"><span>Баланс</span><b id="profileCoins">0 🪙</b></div></div>
+    <div class="item">
+      <div class="row"><b>🎁 Мои коды</b></div>
+      <div id="myCodes" class="small" style="margin-top:8px">Кодов пока нет.</div>
+    </div>
+    <button id="adminOpenBtn" class="primary hidden" style="width:100%;margin-top:9px" onclick="show('admin')">👑 Открыть админку</button>
   </section>
 
   <section id="admin" class="card hidden">
-    <div class="sectionTitle"><h2>👑 Админка</h2></div>
+    <div class="sectionTitle">
+      <h2>👑 Админка</h2>
+      <button class="secondary" onclick="loadAdmin()">Обновить</button>
+    </div>
     <div id="stats"></div>
-    <div class="item"><div class="small">Администратор может менять настройки наград и контролировать выданные коды.</div></div>
+    <div class="item">
+      <b>🎟️ Коды наград</b>
+      <div class="small" style="margin-top:5px">Здесь появляются коды, которые сервер выдал пользователям за награды. Ты можешь отметить код как выданный или аннулировать его.</div>
+      <div id="adminCodes" style="margin-top:8px">Загрузка…</div>
+    </div>
   </section>
 </div>
 
@@ -178,6 +195,7 @@ function show(id){
   const map={home:'navHome',tasks:'navTasks',ref:'navRef',profile:'navProfile'};
   if(map[id]) document.getElementById(map[id]).classList.add('active');
   if(id==='profile') renderProfile();
+  if(id==='admin') loadAdmin();
 }
 function renderProfile(){
   if(!me?.user)return;
@@ -185,6 +203,67 @@ function renderProfile(){
   document.getElementById('profileId').textContent=me.user.id||'—';
   document.getElementById('profileCoins').textContent=(me.user.coins??0)+' 🪙';
 }
+
+function escapeHtmlClient(s=''){
+  return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function codeStatusLabel(status){
+  const map={pending:'Ожидает выдачи',issued:'Выдан',cancelled:'Аннулирован',expired:'Истёк'};
+  return map[status]||status;
+}
+function renderMyCodes(){
+  const box=document.getElementById('myCodes');
+  if(!box) return;
+  const codes=me?.codes||[];
+  if(!codes.length){box.textContent='Кодов пока нет.';return}
+  box.innerHTML=codes.map(c=>`
+    <div class="codeRow">
+      <div class="code">${escapeHtmlClient(c.code)}</div>
+      <div class="codeMeta">
+        Награда: ${escapeHtmlClient(c.reward_value)} ${escapeHtmlClient(c.reward_type)}<br>
+        Статус: <span class="${c.status==='pending'?'statusPending':c.status==='issued'?'statusIssued':c.status==='expired'?'statusExpired':'statusCancelled'}">${codeStatusLabel(c.status)}</span>
+      </div>
+    </div>`).join('');
+}
+async function loadAdmin(){
+  if(!me?.admin) return;
+  try{
+    const [s,c]=await Promise.all([api('/api/admin/stats'),api('/api/admin/codes')]);
+    document.getElementById('stats').innerHTML=`
+      <div class="grid">
+        <div class="item">Пользователи<br><b>${s.users}</b></div>
+        <div class="item">Прокруты<br><b>${s.spins}</b></div>
+        <div class="item">Монеты<br><b>${s.coins}</b></div>
+        <div class="item">Ожидают<br><b>${s.pendingCodes}</b></div>
+      </div>`;
+    const box=document.getElementById('adminCodes');
+    if(!c.codes?.length){box.innerHTML='<div class="small">Кодов пока нет.</div>';return}
+    box.innerHTML=c.codes.map(row=>{
+      const who=escapeHtmlClient(row.username?('@'+row.username):row.first_name||row.user_id);
+      const canAct=row.status==='pending';
+      return `<div class="codeRow">
+        <div class="code">${escapeHtmlClient(row.code)}</div>
+        <div class="codeMeta">
+          Пользователь: ${who} (ID ${row.user_id})<br>
+          Награда: ${escapeHtmlClient(row.reward_value)} ${escapeHtmlClient(row.reward_type)}<br>
+          Статус: <span class="${row.status==='pending'?'statusPending':row.status==='issued'?'statusIssued':row.status==='expired'?'statusExpired':'statusCancelled'}">${codeStatusLabel(row.status)}</span>
+        </div>
+        ${canAct?`<div class="codeActions">
+          <button class="primary" onclick="setCodeStatus(${Number(row.id)},'issued')">✅ Выдано</button>
+          <button class="secondary" onclick="setCodeStatus(${Number(row.id)},'cancelled')">✖ Аннулировать</button>
+        </div>`:''}
+      </div>`;
+    }).join('');
+  }catch(e){toast(e.message)}
+}
+async function setCodeStatus(id,status){
+  try{
+    await api('/api/admin/codes/'+id+'/status',{method:'POST',body:JSON.stringify({status})});
+    toast(status==='issued'?'Код отмечен как выданный':'Код аннулирован');
+    await loadAdmin();
+  }catch(e){toast(e.message)}
+}
+
 async function loadMe(){
   try{
     if(!initData){toast('Открой приложение через Telegram Mini App');return}
@@ -200,11 +279,11 @@ async function loadMe(){
     document.getElementById('profileName').textContent=me.user.first_name||'—';
     document.getElementById('profileId').textContent=me.user.id||'—';
     document.getElementById('profileCoins').textContent=(me.user.coins??0)+' 🪙';
+    renderMyCodes();
+    document.getElementById('adminOpenBtn').classList.toggle('hidden',!me.admin);
     updateSpinState();
     if(me.admin){
-      document.getElementById('admin').classList.remove('hidden');
-      const s=await api('/api/admin/stats').catch(()=>null);
-      if(s) document.getElementById('stats').innerHTML=`<div class="grid"><div class="item">Пользователи<br><b>${s.users}</b></div><div class="item">Прокруты<br><b>${s.spins}</b></div><div class="item">Монеты<br><b>${s.coins}</b></div><div class="item">Ожидают<br><b>${s.pendingCodes}</b></div></div>`;
+      await loadAdmin();
     }
   }catch(e){toast(e.message)}
 }
@@ -279,6 +358,7 @@ async function spin(){
       me.freeNextAt=Math.floor(Date.now()/1000)+(cfg?.freeSpinHours||24)*3600;
       document.getElementById('coins').textContent=j.coins;
       renderProfile();
+      renderMyCodes();
       setResult(result.kind==='coins'?`+${result.value} монет`:result.label);
       toast(result.kind==='coins'?`Начислено +${result.value} 🪙`:`Результат: ${result.label}`);
       spinning=false; updateSpinState();
