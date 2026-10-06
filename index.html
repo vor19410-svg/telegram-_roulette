@@ -132,9 +132,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
       <div class="spinStatus" id="spinStatus">Бесплатный прокрут доступен</div>
       <div class="actions">
-        <button id="spinButton" class="primary" onclick="spin()">🎡 Крутить колесо</button>
+        <button id="spinButton" class="primary" onclick="spin()">🎡 Бесплатный прокрут</button>
+        <button id="paidSpinButton" class="secondary" onclick="paidSpin()">🪙 Прокрут за 100 монет</button>
         <button class="secondary" onclick="show('tasks')">Перейти к заданиям</button>
       </div>
+      <div id="paidSpinStatus" class="small" style="margin-top:8px">Платных прокрутов: 0/5 за 24 часа</div>
       <div id="resultBox" class="result hidden"><span>Результат</span><b id="resultText">—</b></div>
     </div>
   </section>
@@ -151,6 +153,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
   <section id="ref" class="card hidden">
     <div class="sectionTitle"><h2>👥 Реферальная система</h2></div>
     <div class="item"><b>Твоя ссылка</b><input id="refLink" class="input" readonly><button class="primary" style="width:100%;margin-top:8px" onclick="copyRef()">Скопировать ссылку</button></div>
+    <div class="item"><b>👥 Приглашено: <span id="refCount">0</span></b></div>
     <div class="item"><b>Как это работает</b><div class="small">Ссылка содержит твой Telegram ID. Сервер может использовать её для привязки приглашённого пользователя к пригласившему.</div></div>
   </section>
 
@@ -527,6 +530,7 @@ async function loadMe(){
     document.getElementById('playerId').textContent='ID: '+(me.user.id||'—');
     document.getElementById('avatar').textContent=(me.user.first_name||'EP').slice(0,2).toUpperCase();
     document.getElementById('adminBadge').classList.toggle('hidden',!me.admin);
+    document.getElementById('refCount').textContent=me.referralCount??0;
     document.getElementById('refLink').value=cfg?.botUsername?`https://t.me/${cfg.botUsername}?start=${me.user.id}`:'BOT_USERNAME не настроен';
     document.getElementById('profileName').textContent=me.user.first_name||'—';
     document.getElementById('profileId').textContent=me.user.id||'—';
@@ -566,9 +570,21 @@ function formatTime(sec){
 }
 function updateSpinState(){
   const btn=document.getElementById('spinButton');
+  const paidBtn=document.getElementById('paidSpinButton');
+  const paidStatus=document.getElementById('paidSpinStatus');
   const status=document.getElementById('spinStatus');
   if(!btn||!status||!me) return;
   clearInterval(cooldownTimer);
+  if(paidStatus){
+    const limit=Number(cfg?.paidSpinLimit||5);
+    const used=Number(me.paidUsed||0);
+    paidStatus.textContent=`Платных прокрутов: ${used}/${limit} за 24 часа · 100 🪙 за прокрут`;
+  }
+  if(paidBtn){
+    const limit=Number(cfg?.paidSpinLimit||5);
+    paidBtn.disabled=spinning || Number(me.paidLeft||0)<=0 || Number(me.user?.coins||0)<Number(cfg?.paidSpinCost||100);
+    paidBtn.textContent=spinning?'⏳ Подожди…':`🪙 Прокрут за ${Number(cfg?.paidSpinCost||100)} монет`;
+  }
   if(me.freeAvailable){
     btn.disabled=spinning;
     btn.textContent=spinning?'⏳ Колесо вращается…':'🎡 Крутить колесо';
@@ -583,6 +599,37 @@ function updateSpinState(){
     status.textContent='Следующий бесплатный прокрут через '+formatTime(left);
   };
   tick(); cooldownTimer=setInterval(tick,1000);
+}
+
+async function paidSpin(){
+  if(spinning || !me || Number(me.paidLeft||0)<=0) return;
+  const cost=Number(cfg?.paidSpinCost||100);
+  if(Number(me.user?.coins||0)<cost){toast(`Нужно ${cost} монет`);return;}
+  spinning=true; updateSpinState();
+  document.getElementById('resultBox').classList.add('hidden');
+  try{
+    const j=await api('/api/spin',{method:'POST',body:JSON.stringify({paid:true})});
+    const result=j.result;
+    const index=Math.max(0,wheelOrder.indexOf(result.id));
+    const center=index*45;
+    const current=((wheelRotation%360)+360)%360;
+    let delta=(360-center-current+360)%360;
+    delta+=360*5;
+    wheelRotation+=delta;
+    document.querySelector('.wheel').style.transform=`rotate(${wheelRotation}deg)`;
+    setTimeout(()=>{
+      me.user.coins=j.coins;
+      me.paidUsed=Number(me.paidUsed||0)+1;
+      me.paidLeft=Math.max(0,Number(me.paidLeft||0)-1);
+      document.getElementById('coins').textContent=me.user.coins;
+      renderProfile?.();
+      showResult(result);
+      spinning=false; updateSpinState();
+    },4200);
+  }catch(e){
+    spinning=false; updateSpinState();
+    toast(e.message||'Не удалось прокрутить колесо');
+  }
 }
 
 function setResult(text){

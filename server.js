@@ -146,7 +146,11 @@ function authInitData(initData){
   if(!crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(hash))) return null;
   const authDate = Number(p.get('auth_date')||0);
   if(now()-authDate > 86400) return null;
-  try { return JSON.parse(p.get('user')); } catch { return null; }
+  try {
+    const user = JSON.parse(p.get('user'));
+    user.start_param = p.get('start_param') || '';
+    return user;
+  } catch { return null; }
 }
 async function tg(method, body={}){
   const r=await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`,{
@@ -182,7 +186,7 @@ function upsertUser(tgUser, referralId){
 function requireUser(req,res){
   const tgUser=authInitData(req.headers['x-telegram-init-data']||'');
   if(!tgUser) { res.status(401).json({error:'Не удалось проверить Telegram WebApp данные'}); return null; }
-  const ref = req.headers['x-referral-id'] || '';
+  const ref = req.headers['x-referral-id'] || tgUser.start_param || '';
   const u=upsertUser(tgUser,ref);
   return {tgUser,u};
 }
@@ -195,7 +199,7 @@ function requireAdmin(req,res){
 app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!CHANNEL_USERNAME,webappConfigured:!!WEBAPP_URL}));
 
 app.get('/api/config',(req,res)=>{
-  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),ucRouletteInventory:setting('uc_roulette_inventory')});
+  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
 });
 
 app.get('/api/me',(req,res)=>{
@@ -207,7 +211,8 @@ app.get('/api/me',(req,res)=>{
   const paidCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='paid' AND created_at>?").get(u.id,paidSince).c;
   const claims=db.prepare('SELECT task_key FROM task_claims WHERE user_id=?').all(u.id).map(x=>x.task_key);
   const codes=db.prepare('SELECT code,reward_type,reward_value,status,expires_at,created_at FROM codes WHERE user_id=? ORDER BY created_at DESC').all(u.id);
-  res.json({user:u,freeAvailable:now()-lastFree>=setting('free_spin_hours')*3600,freeNextAt:lastFree+setting('free_spin_hours')*3600,paidUsed:paidCount,paidLeft:Math.max(0,setting('paid_spin_limit')-paidCount),claims,codes,admin:String(u.id)===ADMIN_ID});
+  const referralCount=db.prepare('SELECT COUNT(*) c FROM users WHERE referred_by=?').get(u.id).c;
+  res.json({user:u,referralCount,freeAvailable:now()-lastFree>=setting('free_spin_hours')*3600,freeNextAt:lastFree+setting('free_spin_hours')*3600,paidUsed:paidCount,paidLeft:Math.max(0,setting('paid_spin_limit')-paidCount),claims,codes,admin:String(u.id)===ADMIN_ID});
 });
 
 app.post('/api/spin',(req,res)=>{
@@ -363,12 +368,12 @@ app.get('/api/admin/settings',(req,res)=>{
 
 function maybeRewardReferral(userId,t=now()){
   const fresh=db.prepare('SELECT * FROM users WHERE id=?').get(userId);
-  if(!fresh || !fresh.referred_by || !fresh.first_spin_done || fresh.referral_rewarded) return;
-  // Subscription is checked live so reward is granted regardless of whether the user subscribed before or after the first spin.
+  if(!fresh || !fresh.referred_by || fresh.referral_rewarded) return;
+  // Referral reward is granted once after the invited user is verified as subscribed to the channel.
   isSubscribed(userId).then(subscribed=>{
     if(!subscribed) return;
     const fresh2=db.prepare('SELECT * FROM users WHERE id=?').get(userId);
-    if(!fresh2 || !fresh2.referred_by || !fresh2.first_spin_done || fresh2.referral_rewarded) return;
+    if(!fresh2 || !fresh2.referred_by || fresh2.referral_rewarded) return;
     const ref=db.prepare('SELECT * FROM users WHERE id=?').get(fresh2.referred_by);
     if(!ref) return;
     const reward=setting('referral_reward');
