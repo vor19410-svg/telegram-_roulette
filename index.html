@@ -208,12 +208,26 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
   <section id="rewardSettings" class="card hidden">
     <div class="sectionTitle">
-      <h2>⚙️ Настройки наград</h2>
+      <h2>⚙️ Настройки</h2>
       <button class="secondary" onclick="loadRewardSettings()">Обновить</button>
     </div>
     <div class="item">
-      <div class="small" style="margin-bottom:10px">Эти настройки доступны только администратору и применяются к новым обменам.</div>
+      <div class="small" style="margin-bottom:10px">Здесь настраивается шанс выпадения каждого результата рулетки. Значения указываются в процентах.</div>
       <div class="grid">
+        <label>🪙 50 монет, %<input id="setWeightC50a" type="number" min="0" max="100" step="0.1"></label>
+        <label>🪙 100 монет, %<input id="setWeightC100a" type="number" min="0" max="100" step="0.1"></label>
+        <label>🪙 150 монет, %<input id="setWeightC150a" type="number" min="0" max="100" step="0.1"></label>
+        <label>🪙 100 монет, % (2)<input id="setWeightC100b" type="number" min="0" max="100" step="0.1"></label>
+        <label>🪙 150 монет, % (2)<input id="setWeightC150b" type="number" min="0" max="100" step="0.1"></label>
+        <label>🏷️ Скидка 25%, %<input id="setWeightDiscount25" type="number" min="0" max="100" step="0.1"></label>
+        <label>🎮 60 UC, %<input id="setWeightUc60" type="number" min="0" max="100" step="0.1"></label>
+        <label>😕 Ничего, %<input id="setWeightNothing" type="number" min="0" max="100" step="0.1"></label>
+      </div>
+      <div id="weightTotal" class="small" style="margin-top:10px">Всего задано: —%</div><div class="small">Если сумма меньше 100%, недостающий процент автоматически получает «Ничего». Сумма больше 100% запрещена.</div>
+    </div>
+    <div class="item">
+      <b>🎁 Настройки обмена</b>
+      <div class="grid" style="margin-top:10px">
         <label>🏷️ Скидка: монет<input id="setDiscountCoins" type="number" min="1"></label>
         <label>🏷️ Процент скидки<input id="setDiscountPercent" type="number" min="1" max="100"></label>
         <label>🎮 UC: монет<input id="setUcCoins" type="number" min="1"></label>
@@ -337,6 +351,17 @@ async function loadAdmin(){
     }).join('');
   }catch(e){toast(e.message)}
 }
+function updateWeightTotal(){
+  const ids=['setWeightC50a','setWeightC100a','setWeightC150a','setWeightC100b','setWeightC150b','setWeightDiscount25','setWeightUc60','setWeightNothing'];
+  const total=ids.reduce((sum,id)=>sum+(Number(document.getElementById(id)?.value)||0),0);
+  const el=document.getElementById('weightTotal');
+  if(el) el.textContent=`Всего задано: ${total.toFixed(1)}% ${total<=100.000001?'✅ Остаток автоматически — «Ничего»':'⚠️ Сумма не может быть больше 100%'}`;
+}
+function bindWeightInputs(){
+  ['setWeightC50a','setWeightC100a','setWeightC150a','setWeightC100b','setWeightC150b','setWeightDiscount25','setWeightUc60','setWeightNothing'].forEach(id=>{
+    document.getElementById(id)?.addEventListener('input',updateWeightTotal);
+  });
+}
 async function loadRewardSettings(){
   if(!me?.admin){ show('profile'); toast('Доступ только для администратора'); return; }
   try{
@@ -346,6 +371,15 @@ async function loadRewardSettings(){
     document.getElementById('setUcCoins').value=settings.exchange_coins??3500;
     document.getElementById('setUcAmount').value=settings.exchange_uc??60;
     document.getElementById('setCodeDays').value=settings.code_days??10;
+    document.getElementById('setWeightC50a').value=settings.weight_c50a??15;
+    document.getElementById('setWeightC100a').value=settings.weight_c100a??10;
+    document.getElementById('setWeightC150a').value=settings.weight_c150a??7;
+    document.getElementById('setWeightC100b').value=settings.weight_c100b??6;
+    document.getElementById('setWeightC150b').value=settings.weight_c150b??5;
+    document.getElementById('setWeightDiscount25').value=settings.weight_discount25??3;
+    document.getElementById('setWeightUc60').value=settings.weight_uc60??0.2;
+    document.getElementById('setWeightNothing').value=settings.weight_nothing??53.8;
+    bindWeightInputs(); updateWeightTotal();
   }catch(e){toast(e.message||'Не удалось загрузить настройки');}
 }
 
@@ -356,11 +390,23 @@ async function saveAdminSettings(){
       exchange_discount_percent:Number(document.getElementById('setDiscountPercent').value),
       exchange_coins:Number(document.getElementById('setUcCoins').value),
       exchange_uc:Number(document.getElementById('setUcAmount').value),
-      code_days:Number(document.getElementById('setCodeDays').value)
+      code_days:Number(document.getElementById('setCodeDays').value),
+      weight_c50a:Number(document.getElementById('setWeightC50a').value),
+      weight_c100a:Number(document.getElementById('setWeightC100a').value),
+      weight_c150a:Number(document.getElementById('setWeightC150a').value),
+      weight_c100b:Number(document.getElementById('setWeightC100b').value),
+      weight_c150b:Number(document.getElementById('setWeightC150b').value),
+      weight_discount25:Number(document.getElementById('setWeightDiscount25').value),
+      weight_uc60:Number(document.getElementById('setWeightUc60').value),
+      weight_nothing:Number(document.getElementById('setWeightNothing').value)
     };
     if(!payload.exchange_discount_coins||!payload.exchange_coins||!payload.exchange_uc||!payload.code_days){toast('Заполни все поля');return}
     if(payload.exchange_discount_percent<1||payload.exchange_discount_percent>100){toast('Скидка должна быть от 1 до 100%');return}
     if(payload.code_days<1||payload.code_days>365){toast('Срок кода: от 1 до 365 дней');return}
+    const odds=[payload.weight_c50a,payload.weight_c100a,payload.weight_c150a,payload.weight_c100b,payload.weight_c150b,payload.weight_discount25,payload.weight_uc60,payload.weight_nothing];
+    if(odds.some(x=>x<0||x>100||!Number.isFinite(x))){toast('Шансы должны быть от 0 до 100%');return}
+    const total=odds.reduce((a,b)=>a+b,0);
+    if(total>100.000001){toast(`Сумма шансов не может быть больше 100%. Сейчас ${total.toFixed(1)}%`);return}
     await api('/api/admin/settings',{method:'POST',body:JSON.stringify(payload)});
     toast('Настройки сохранены');
     await loadAdmin();
@@ -468,6 +514,7 @@ async function loadMe(){
     document.getElementById('profileCoins').textContent=(me.user.coins??0)+' 🪙';
     renderMyCodes();
     document.getElementById('adminOpenBtn').classList.toggle('hidden',!me.admin);
+    document.getElementById('rewardSettingsBtn').classList.toggle('hidden',!me.admin);
     updateSpinState();
     if(me.admin){
       await loadAdmin();

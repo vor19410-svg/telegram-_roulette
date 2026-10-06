@@ -91,7 +91,7 @@ const defaults = {
   weight_c150b: '5',
   weight_discount25: '3',
   weight_uc60: '0.2',
-  weight_nothing: '50',
+  weight_nothing: '53.8',
   uc_roulette_inventory: '1'
 };
 const setDefault = db.prepare(`INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)`);
@@ -124,10 +124,17 @@ function pickResult(){
     .filter(r => r.id !== 'uc60' || inventory > 0)
     .map(r=>({...r,weight:Math.max(0,Number(setting(r.weightKey))||0)}));
   const scale=1000;
-  const weights=pool.map(r=>Math.max(0,Math.round(r.weight*scale)));
+  let weights=pool.map(r=>Math.max(0,Math.round(r.weight*scale)));
   const total=weights.reduce((a,w)=>a+w,0);
   if(total<=0) return {id:'nothing',label:'Ничего',kind:'nothing',value:0,weightKey:'weight_nothing',weight:1};
-  let x=crypto.randomInt(total);
+  // Если сумма заданных шансов меньше 100%, остаток автоматически считается шансом «Ничего».
+  // Поэтому администратору не обязательно вручную доводить сумму до 100%.
+  const nothingIndex=pool.findIndex(r=>r.id==='nothing');
+  if(nothingIndex>=0 && total < scale*100){
+    weights[nothingIndex] += scale*100-total;
+  }
+  const finalTotal=weights.reduce((a,w)=>a+w,0);
+  let x=crypto.randomInt(finalTotal);
   for(let i=0;i<pool.length;i++){ x-=weights[i]; if(x<0) return pool[i]; }
   return pool[pool.length-1];
 }
@@ -332,6 +339,14 @@ app.post('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
   const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_nothing','uc_roulette_inventory'];
   const update=db.prepare('UPDATE settings SET value=? WHERE key=?');
+  const weightKeys=['weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_nothing'];
+  const submittedWeights=weightKeys.filter(k=>req.body[k]!==undefined);
+  if(submittedWeights.length){
+    if(submittedWeights.length!==weightKeys.length) return res.status(400).json({error:'Нужно указать шанс для всех результатов рулетки'});
+    const total=weightKeys.reduce((sum,k)=>sum+Number(req.body[k]),0);
+    if(!weightKeys.every(k=>Number.isFinite(Number(req.body[k])) && Number(req.body[k])>=0 && Number(req.body[k])<=100)) return res.status(400).json({error:'Шансы должны быть от 0 до 100%'});
+    if(total>100.000001) return res.status(400).json({error:`Сумма шансов не может быть больше 100%. Сейчас ${total.toFixed(1)}%`});
+  }
   for(const k of allowed){
     if(req.body[k]===undefined) continue;
     const n=Number(req.body[k]);
