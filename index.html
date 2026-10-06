@@ -157,9 +157,21 @@ button:disabled{opacity:.45;cursor:not-allowed}
   </section>
 
   <section id="exchange" class="card hidden">
-    <div class="sectionTitle"><h2>💱 Обмен</h2></div>
-    <div class="item"><b id="exchangeUcTitle">Обмен UC</b><div class="small">Раздел предназначен для обмена накопленных монет на предусмотренные награды.</div></div>
-    <div class="item"><b id="exchangeDiscountTitle">Скидка</b><div class="small">Награды выдаются по правилам проекта после накопления нужного количества монет.</div></div>
+    <div class="sectionTitle"><h2>🔄 Обмен</h2></div>
+    <div class="item">
+      <div class="row"><span>💰 Твой баланс</span><b id="exchangeCoins">0 🪙</b></div>
+    </div>
+    <div class="item">
+      <div class="row"><b>🏷️ Скидка 25%</b><span>800 🪙</span></div>
+      <div class="small" style="margin-top:5px">После обмена ты получишь код скидки. Код действует 10 дней с момента получения.</div>
+      <button class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('discount',800)">Обменять за 800 🪙</button>
+    </div>
+    <div class="item">
+      <div class="row"><b>🎮 60 UC</b><span>3500 🪙</span></div>
+      <div class="small" style="margin-top:5px">После обмена ты получишь код на 60 UC. Код действует 10 дней с момента получения.</div>
+      <button class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('uc60',3500)">Обменять за 3500 🪙</button>
+    </div>
+    <button class="secondary" style="width:100%;margin-top:9px" onclick="show('profile')">← Назад в профиль</button>
   </section>
 
   <section id="profile" class="card hidden">
@@ -171,7 +183,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div class="row"><b>🎁 Мои коды</b></div>
       <div id="myCodes" class="small" style="margin-top:8px">Кодов пока нет.</div>
     </div>
-    <button id="adminOpenBtn" class="primary hidden" style="width:100%;margin-top:9px" onclick="show('admin')">👑 Открыть админку</button>
+    <button id="adminOpenBtn" class="primary hidden" style="width:100%;margin-top:9px" onclick="show('admin')">👑 Открыть админку</button>\n    <button class="primary" style="width:100%;margin-top:9px" onclick="show('exchange')">🔄 Обмен наград</button>
   </section>
 
   <section id="admin" class="card hidden">
