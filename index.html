@@ -194,6 +194,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
     </div>
     <div id="stats"></div>
     <div class="item">
+      <b>👥 Пользователи</b>
+      <div class="small" style="margin-top:5px">Последние 200 пользователей, баланс и активность.</div>
+      <div id="adminUsers" style="margin-top:8px">Загрузка…</div>
+    </div>
+    <div class="item">
       <b>🎟️ Коды наград</b>
       <div class="small" style="margin-top:5px">Здесь появляются коды, которые сервер выдал пользователям за награды. Ты можешь отметить код как выданный или аннулировать его.</div>
       <div id="adminCodes" style="margin-top:8px">Загрузка…</div>
@@ -270,11 +275,22 @@ async function loadAdmin(){
     const [s,c]=await Promise.all([api('/api/admin/stats'),api('/api/admin/codes')]);
     document.getElementById('stats').innerHTML=`
       <div class="grid">
-        <div class="item">Пользователи<br><b>${s.users}</b></div>
-        <div class="item">Прокруты<br><b>${s.spins}</b></div>
-        <div class="item">Монеты<br><b>${s.coins}</b></div>
+        <div class="item">Пользователи<br><b>${s.users}</b><div class="small">+${s.newUsers24h} за 24ч</div></div>
+        <div class="item">Активные 24ч<br><b>${s.activeUsers24h}</b></div>
+        <div class="item">Прокруты<br><b>${s.spins}</b><div class="small">${s.spins24h} за 24ч</div></div>
+        <div class="item">Монеты у игроков<br><b>${s.coins}</b></div>
+        <div class="item">Коды выданы<br><b>${s.issuedCodes}</b></div>
+        <div class="item">Обменов<br><b>${s.exchangeCodes}</b></div>
         <div class="item">Ожидают<br><b>${s.pendingCodes}</b></div>
       </div>`;
+    const users=await api('/api/admin/users');
+    const usersBox=document.getElementById('adminUsers');
+    if(usersBox){
+      usersBox.innerHTML=users.users?.length?users.users.map(u=>{
+        const who=escapeHtmlClient(u.username?('@'+u.username):u.first_name||'Без имени');
+        return `<div class="codeRow"><div class="code">${who}</div><div class="codeMeta">ID: ${u.id}<br>Баланс: ${u.coins} 🪙 · Прокруты: ${u.spins} · Коды: ${u.codes}<br>Регистрация: ${new Date(Number(u.created_at)*1000).toLocaleString('ru-RU')}</div></div>`;
+      }).join(''):'<div class="small">Пользователей пока нет.</div>';
+    }
     const box=document.getElementById('adminCodes');
     if(!c.codes?.length){box.innerHTML='<div class="small">Кодов пока нет.</div>';return}
     box.innerHTML=c.codes.map(row=>{

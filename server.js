@@ -312,12 +312,23 @@ app.post('/api/admin/codes/:id/status',(req,res)=>{
 });
 app.get('/api/admin/stats',(req,res)=>{
   if(!requireAdmin(req,res)) return;
+  const t=now(), day=t-86400;
   res.json({
     users:db.prepare('SELECT COUNT(*) c FROM users').get().c,
+    newUsers24h:db.prepare('SELECT COUNT(*) c FROM users WHERE created_at>?').get(day).c,
+    activeUsers24h:db.prepare('SELECT COUNT(DISTINCT user_id) c FROM spins WHERE created_at>?').get(day).c,
     spins:db.prepare('SELECT COUNT(*) c FROM spins').get().c,
-    pendingCodes:db.prepare("SELECT COUNT(*) c FROM codes WHERE status='pending' AND expires_at>?").get(now()).c,
+    spins24h:db.prepare('SELECT COUNT(*) c FROM spins WHERE created_at>?').get(day).c,
+    pendingCodes:db.prepare("SELECT COUNT(*) c FROM codes WHERE status='pending' AND expires_at>?").get(t).c,
+    issuedCodes:db.prepare("SELECT COUNT(*) c FROM codes WHERE status='issued'").get().c,
+    exchangeCodes:db.prepare("SELECT COUNT(*) c FROM codes WHERE source='exchange'").get().c,
     coins:db.prepare('SELECT COALESCE(SUM(coins),0) s FROM users').get().s
   });
+});
+app.get('/api/admin/users',(req,res)=>{
+  if(!requireAdmin(req,res)) return;
+  const rows=db.prepare(`SELECT u.id,u.username,u.first_name,u.coins,u.created_at,u.updated_at, (SELECT COUNT(*) FROM spins s WHERE s.user_id=u.id) AS spins, (SELECT COUNT(*) FROM codes c WHERE c.user_id=u.id) AS codes FROM users u ORDER BY u.updated_at DESC LIMIT 200`).all();
+  res.json({users:rows});
 });
 app.post('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
