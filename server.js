@@ -127,16 +127,12 @@ function pickResult(){
   let weights=pool.map(r=>Math.max(0,Math.round(r.weight*scale)));
   const total=weights.reduce((a,w)=>a+w,0);
   if(total<=0) return {id:'nothing',label:'Ничего',kind:'nothing',value:0,weightKey:'weight_nothing',weight:1};
-  // Если сумма заданных шансов меньше 100%, остаток автоматически считается шансом «Ничего».
-  // Поэтому администратору не обязательно вручную доводить сумму до 100%.
-  const nothingIndex=pool.findIndex(r=>r.id==='nothing');
-  if(nothingIndex>=0 && total < scale*100){
-    weights[nothingIndex] += scale*100-total;
-  }
-  const finalTotal=weights.reduce((a,w)=>a+w,0);
+  // Шансы являются абсолютными процентами от 100. Остаток НЕ добавляется к «Ничего».
+  // Например, если задано 70%, оставшиеся 30% — отдельный исход без награды.
+  const finalTotal=scale*100;
   let x=crypto.randomInt(finalTotal);
   for(let i=0;i<pool.length;i++){ x-=weights[i]; if(x<0) return pool[i]; }
-  return pool[pool.length-1];
+  return {id:'unassigned',label:'Без награды',kind:'nothing',value:0,weightKey:null,weight:100-total/scale};
 }
 
 function authInitData(initData){
@@ -356,7 +352,8 @@ app.post('/api/admin/settings',(req,res)=>{
     if(k==='code_days' && n>365) return res.status(400).json({error:'Срок кода не может быть больше 365 дней'});
     update.run(String(req.body[k]),k);
   }
-  res.json({ok:true});
+  const saved=db.prepare('SELECT key,value FROM settings').all();
+  res.json({ok:true,settings:Object.fromEntries(saved.map(x=>[x.key,Number(x.value)]))});
 });
 app.get('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
