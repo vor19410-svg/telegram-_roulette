@@ -7,7 +7,6 @@
 
 <div id="rewardOverlay" class="rewardOverlay hidden" onclick="if(event.target===this) closeRewardPopup()">
   <div class="rewardModal">
-    <button class="rewardClose" onclick="closeRewardPopup()" aria-label="Закрыть">×</button>
     <div id="rewardTitle" class="rewardTitle">🎉 Награда!</div>
     <div id="rewardInfo" class="rewardInfo"></div>
     <div id="rewardCode" class="rewardCode hidden"></div>
@@ -82,11 +81,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
 .rewardOverlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:18px;z-index:9999}
 .rewardModal{width:min(430px,100%);background:linear-gradient(180deg,#191022,#0d0914);border:1px solid #5b3b72;border-radius:22px;padding:20px;box-shadow:0 20px 70px rgba(0,0,0,.6);position:relative;text-align:center}
-.rewardClose{position:absolute;right:12px;top:10px;width:34px;height:34px;border:0;border-radius:50%;background:#24182e;color:#fff;font-size:20px;cursor:pointer}
 .rewardTitle{font-size:22px;font-weight:800;margin:6px 28px 8px}
 .rewardInfo{color:#c9bed1;font-size:14px;line-height:1.5}
 .rewardCode{margin:16px 0;padding:14px;border-radius:14px;background:#09070d;border:1px dashed #9a6cc2;font-size:22px;font-weight:900;letter-spacing:2px;word-break:break-all}
-.rewardActions{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-top:14px}
+.rewardActions{display:flex;flex-direction:column;align-items:center;gap:9px;margin-top:14px}.rewardActions button{width:min(260px,100%)}
 .rewardActions button{width:100%;padding:12px;border-radius:12px;border:0;font-weight:800;cursor:pointer}
 .rewardTake{background:#8b5cf6;color:#fff}.rewardContinue{background:#271a32;color:#fff;border:1px solid #4a3159!important}
 .hidden{display:none!important}
