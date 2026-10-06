@@ -531,7 +531,7 @@ async function loadMe(){
     document.getElementById('avatar').textContent=(me.user.first_name||'EP').slice(0,2).toUpperCase();
     document.getElementById('adminBadge').classList.toggle('hidden',!me.admin);
     document.getElementById('refCount').textContent=me.referralCount??0;
-    document.getElementById('refLink').value=cfg?.botUsername?`https://t.me/${cfg.botUsername}?start=${me.user.id}`:'BOT_USERNAME не настроен';
+    document.getElementById('refLink').value=cfg?.botUsername?`https://t.me/${cfg.botUsername}?start=${encodeURIComponent(me.user.id)}`:'BOT_USERNAME не настроен';
     document.getElementById('profileName').textContent=me.user.first_name||'—';
     document.getElementById('profileId').textContent=me.user.id||'—';
     document.getElementById('profileCoins').textContent=(me.user.coins??0)+' 🪙';
@@ -545,8 +545,8 @@ async function loadMe(){
   }catch(e){toast(e.message)}
 }
 function openChannel(){
-  if(!cfg?.channelUrl){toast('Ссылка на канал не настроена');return}
-  if(tg?.openTelegramLink) tg.openTelegramLink(cfg.channelUrl); else window.open(cfg.channelUrl,'_blank');
+  const url=cfg?.channelUrl || (cfg?.channelUsername?`https://t.me/${String(cfg.channelUsername).replace(/^@/,'')}`:''); if(!url){toast('Ссылка на канал не настроена');return}
+  if(tg?.openTelegramLink) tg.openTelegramLink(url); else window.open(url,'_blank');
 }
 async function claimChannel(){
   try{const j=await api('/api/task/channel/claim',{method:'POST'});toast(`Задание выполнено. +${j.reward} 🪙`);loadMe()}

@@ -15,6 +15,7 @@ const ADMIN_ID = String(process.env.ADMIN_TELEGRAM_ID || '');
 const BOT_USERNAME = process.env.BOT_USERNAME || '';
 const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
 const CHANNEL_URL = process.env.CHANNEL_URL || '';
+const EFFECTIVE_CHANNEL_URL = CHANNEL_URL || (CHANNEL_USERNAME ? `https://t.me/${CHANNEL_USERNAME.replace(/^@/,'')}` : '');
 const WEBAPP_URL = process.env.WEBAPP_URL || '';
 
 app.use(express.json({ limit: '256kb' }));
@@ -199,7 +200,7 @@ function requireAdmin(req,res){
 app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!CHANNEL_USERNAME,webappConfigured:!!WEBAPP_URL}));
 
 app.get('/api/config',(req,res)=>{
-  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
+  res.json({channelUrl:EFFECTIVE_CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
 });
 
 app.get('/api/me',(req,res)=>{
@@ -262,7 +263,7 @@ app.post('/api/task/channel/claim',async (req,res)=>{
     db.prepare('INSERT INTO task_claims(user_id,task_key,created_at) VALUES(?,?,?)').run(u.id,'channel',t);
   }); tx();
 
-  // Referral reward is released only after the invited user both subscribes and makes a first spin.
+  // Referral reward is released after the invited user successfully passes the channel subscription check.
   maybeRewardReferral(u.id,t);
   res.json({ok:true,reward,coins:db.prepare('SELECT coins FROM users WHERE id=?').get(u.id).coins});
 });
@@ -403,9 +404,12 @@ async function pollBot(){
         const parts=m.text.split(' ');
         const ref=parts[1]||'';
         upsertUser(m.from,ref);
+        const miniUrl = WEBAPP_URL
+          ? `${WEBAPP_URL}${WEBAPP_URL.includes('?')?'&':'?'}startapp=${encodeURIComponent(ref||'')}`
+          : '';
         const buttons={inline_keyboard:[
-          [{text:'🎰 Открыть рулетку',web_app:{url:WEBAPP_URL}}],
-          [{text:'📢 Подписаться на канал',url:CHANNEL_URL}]
+          [{text:'🎰 Открыть рулетку',web_app:{url:miniUrl || WEBAPP_URL}}],
+          ...(EFFECTIVE_CHANNEL_URL ? [[{text:'📢 Подписаться на канал',url:EFFECTIVE_CHANNEL_URL}]] : [])
         ]};
         await tg('sendMessage',{chat_id:chatId,text:`🎰 <b>Рулетка</b>\n\nДобро пожаловать, ${escapeHtml(m.from.first_name||'игрок')}!\n\nУ тебя есть бесплатный прокрут раз в 24 часа. Выполняй задания и приглашай друзей, чтобы получать дополнительные монеты.`,parse_mode:'HTML',reply_markup:buttons});
       }
