@@ -583,7 +583,7 @@ function updateSpinState(){
   if(paidBtn){
     const limit=Number(cfg?.paidSpinLimit||5);
     paidBtn.disabled=spinning || Number(me.paidLeft||0)<=0 || Number(me.user?.coins||0)<Number(cfg?.paidSpinCost||100);
-    paidBtn.textContent=spinning?'⏳ Подожди…':`🪙 Прокрут за ${Number(cfg?.paidSpinCost||100)} монет`;
+    paidBtn.textContent=`🪙 Прокрут за ${Number(cfg?.paidSpinCost||100)} монет`;
   }
   if(me.freeAvailable){
     btn.disabled=spinning;
