@@ -255,6 +255,13 @@ tg?.ready(); tg?.expand();
 const initData=tg?.initData||'';
 let me=null,cfg=null;
 
+// Load public configuration independently of Telegram authentication so the
+// channel button can always work even if the user session needs re-auth.
+async function loadPublicConfig(){
+  try{ cfg=await (await fetch('/api/config',{cache:'no-store'})).json(); if(cfg) cfg.freeSpinHours=Number(cfg.freeSpinHours||24); }catch(e){ cfg=cfg||{}; }
+}
+loadPublicConfig();
+
 async function api(path,opts={}){
   opts.headers={...(opts.headers||{}),'Content-Type':'application/json','X-Telegram-Init-Data':initData};
   const r=await fetch(path,opts);
@@ -521,9 +528,10 @@ async function exchangeReward(type,cost){
 async function loadMe(){
   try{
     if(!initData){toast('Открой приложение через Telegram Mini App');return}
+    if(!tg){toast('Открой рулетку через Telegram');return}
+    if(!initData){toast('Telegram не передал данные Mini App. Закрой приложение и открой его кнопкой «Открыть рулетку» в Telegram.');return}
     me=await api('/api/me');
-    try{cfg=await (await fetch('/api/config')).json()}catch(e){cfg={}}
-    if(cfg) cfg.freeSpinHours=Number(cfg.freeSpinHours||24);
+    if(!cfg) await loadPublicConfig();
     refreshExchangeBalance();
     document.getElementById('coins').textContent=me.user.coins??0;
     document.getElementById('playerName').textContent=me.user.first_name||'Elite Player';
@@ -550,6 +558,7 @@ function openChannel(){
     const u=String(cfg?.channelUsername||'').trim().replace(/^@/,'');
     if(u) url=`https://t.me/${u}`;
   }
+  if(!url) url='https://t.me/chronopubgmobile';
   if(!url){toast('Ссылка на канал не настроена');return}
   if(!/^https?:\/\//i.test(url)){toast('Неверная ссылка на канал');return}
   try{

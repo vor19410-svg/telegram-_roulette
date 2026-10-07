@@ -154,21 +154,23 @@ function pickResult(){
 }
 
 function authInitData(initData){
-  if(!initData || !BOT_TOKEN) return null;
+  if(!BOT_TOKEN) return {error:'BOT_TOKEN не настроен на сервере'};
+  if(!initData) return {error:'Telegram WebApp initData отсутствует. Откройте Mini App именно из Telegram.'};
   const p = new URLSearchParams(initData);
-  const hash = p.get('hash'); if(!hash) return null;
+  const hash = p.get('hash');
+  if(!hash) return {error:'В initData отсутствует hash. Откройте Mini App заново через Telegram.'};
   p.delete('hash');
   const dataCheck = [...p.entries()].sort((a,b)=>a[0].localeCompare(b[0])).map(([k,v])=>`${k}=${v}`).join('\n');
   const secret = crypto.createHmac('sha256','WebAppData').update(BOT_TOKEN).digest();
   const expected = crypto.createHmac('sha256',secret).update(dataCheck).digest('hex');
-  if(hash.length!==expected.length || !crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(hash))) return null;
+  if(hash.length!==expected.length || !crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(hash))) return {error:'Неверная подпись Telegram WebApp. Проверьте, что BOT_TOKEN в Render принадлежит тому же боту, из которого открывается Mini App.'};
   const authDate = Number(p.get('auth_date')||0);
-  if(now()-authDate > 86400) return null;
+  if(!authDate || Math.abs(now()-authDate) > 86400) return {error:'Данные Telegram WebApp устарели. Закройте Mini App и откройте его заново.'};
   try {
     const user = JSON.parse(p.get('user'));
     user.start_param = p.get('start_param') || '';
-    return user;
-  } catch { return null; }
+    return {user};
+  } catch { return {error:'Не удалось прочитать пользователя Telegram из WebApp данных'}; }
 }
 async function tg(method, body={}){
   const r=await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/${method}`,{
@@ -205,8 +207,9 @@ function upsertUser(tgUser, referralId){
   return db.prepare('SELECT * FROM users WHERE id=?').get(tgUser.id);
 }
 function requireUser(req,res){
-  const tgUser=authInitData(req.headers['x-telegram-init-data']||'');
-  if(!tgUser) { res.status(401).json({error:'Не удалось проверить Telegram WebApp данные'}); return null; }
+  const auth=authInitData(req.headers['x-telegram-init-data']||'');
+  if(auth?.error) { res.status(401).json({error:auth.error}); return null; }
+  const tgUser=auth.user;
   const ref = req.headers['x-referral-id'] || tgUser.start_param || '';
   const u=upsertUser(tgUser,ref);
   return {tgUser,u};
