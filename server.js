@@ -191,6 +191,7 @@ function randomCode(prefix){
   return `${prefix}-${s}`;
 }
 function pickResult(){
+  const resultPool=rouletteSlots.map(slot=>slotResult(slot));
   const pool=resultPool
     .filter(r => !r.inventoryKey || setting(r.inventoryKey) < 0 || setting(r.inventoryKey) > 0)
     .map(r=>({...r,weight:Math.max(0,Number(setting(r.weightKey))||0)}));
