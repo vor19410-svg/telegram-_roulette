@@ -481,6 +481,44 @@ async function loadAdmin(){
   }catch(e){toast(e.message)}
 }
 
+const rouletteSlotMeta=[
+  ['c150a','Слот 1'],['c100a','Слот 2'],['discount25','Слот 3'],['uc30','Слот 4'],['butterfly','Слот 5'],
+  ['nothing','Слот 6'],['uc60','Слот 7'],['c100b','Слот 8'],['c150b','Слот 9'],['c50a','Слот 10']
+];
+const rouletteKindLabels={coins:'🪙 Монеты',discount:'🏷️ Скидка',uc:'🎮 UC',butterfly:'🔪 Нож-бабочка',nothing:'❌ Ничего'};
+const rouletteFallbacks={
+  c150a:['coins','150'],c100a:['coins','100'],discount25:['discount','25'],uc30:['uc','30'],butterfly:['butterfly','Нож-бабочка'],
+  nothing:['nothing','0'],uc60:['uc','60'],c100b:['coins','100'],c150b:['coins','150'],c50a:['coins','50']
+};
+function renderRouletteSlotSettings(settings={}){
+  const box=document.getElementById('rouletteSlotSettings'); if(!box)return;
+  box.innerHTML=rouletteSlotMeta.map(([id,title])=>{
+    const [fallbackKind,fallbackValue]=rouletteFallbacks[id]||['nothing','0'];
+    const kind=String(settings[`slot_${id}_kind`]??fallbackKind);
+    const value=settings[`slot_${id}_value`]??fallbackValue;
+    const weight=settings[`weight_${id}`]??0;
+    return `<div class="item" style="margin-top:8px">
+      <b>🎰 ${title}</b>
+      <div class="grid" style="margin-top:8px">
+        <label>Тип награды<select id="slotKind_${id}">${Object.entries(rouletteKindLabels).map(([k,v])=>`<option value="${k}" ${kind===k?'selected':''}>${v}</option>`).join('')}</select></label>
+        <label>Значение<input id="slotValue_${id}" type="text" value="${escapeHtmlClient(String(value))}" maxlength="60"></label>
+        <label>Шанс %<input id="slotWeight_${id}" type="number" min="0" max="100" step="0.01" value="${Number(weight)}"></label>
+      </div>
+      <div class="small" style="margin-top:5px">Например: тип «Скидка», значение «15» = Скидка 15%.</div>
+    </div>`;
+  }).join('');
+  updateWeightTotal();
+}
+function getRouletteSlotPayload(){
+  const payload={};
+  rouletteSlotMeta.forEach(([id])=>{
+    payload[`slot_${id}_kind`]=document.getElementById(`slotKind_${id}`)?.value||'nothing';
+    payload[`slot_${id}_value`]=document.getElementById(`slotValue_${id}`)?.value||'';
+    payload[`weight_${id}`]=Number(document.getElementById(`slotWeight_${id}`)?.value||0);
+  });
+  return payload;
+}
+
 function updateWeightTotal(){
   const total=rouletteSlotMeta.reduce((sum,[id])=>sum+(Number(document.getElementById(`slotWeight_${id}`)?.value)||0),0);
   const el=document.getElementById('weightTotal');
@@ -570,7 +608,10 @@ function openRewardPopup(result){
   const closeBtn=document.getElementById('rewardCloseBtn');
   const isClaimable = result?.code && (
     String(result?.label||'').toLowerCase().includes('60 uc') ||
+    String(result?.label||'').toLowerCase().includes('30 uc') ||
     String(result?.label||'').toLowerCase().includes('25%') ||
+    String(result?.label||'').toLowerCase().includes('скидка') ||
+    String(result?.label||'').toLowerCase().includes('нож-бабочка') ||
     String(result?.reward_type||'').toLowerCase().includes('uc') ||
     String(result?.reward_type||'').toLowerCase().includes('discount')
   );

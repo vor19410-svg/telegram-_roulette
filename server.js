@@ -159,40 +159,28 @@ const rouletteSlots = [
 ];
 
 function slotResult(slot){
-  const kind=String(settingText(`slot_${slot.id}_kind`) || slot.fallbackKind);
+  const displayKind=String(settingText(`slot_${slot.id}_kind`) || slot.fallbackKind);
   const raw=settingText(`slot_${slot.id}_value`) || slot.fallbackValue;
   let value=raw;
   let label='';
   let inventoryKey=null;
-  if(kind==='coins'){
-    const n=Math.max(0,Math.floor(Number(raw)||0)); value=n; label=`${n} монет`;
-  } else if(kind==='discount'){
-    const n=Math.min(100,Math.max(1,Math.floor(Number(raw)||0))); value=`${n}% скидка`; label=`Скидка ${n}%`; inventoryKey='discount_roulette_inventory';
-  } else if(kind==='uc'){
+  let kind=displayKind;
+  let codePrefix=null;
+  if(displayKind==='coins'){
+    const n=Math.max(0,Math.floor(Number(raw)||0)); value=n; label=`${n} монет`; kind='coins';
+  } else if(displayKind==='discount'){
+    const n=Math.min(100,Math.max(1,Math.floor(Number(raw)||0))); value=`${n}% скидка`; label=`Скидка ${n}%`; inventoryKey='discount_roulette_inventory'; kind='code'; codePrefix='SALE';
+  } else if(displayKind==='uc'){
     const n=Math.max(1,Math.floor(Number(raw)||0)); value=`${n} UC`; label=`${n} UC`;
-    inventoryKey=n===60?'uc_roulette_inventory':n===30?'uc30_roulette_inventory':null;
-  } else if(kind==='butterfly'){
-    value='Нож-бабочка'; label='Нож-бабочка'; inventoryKey='butterfly_roulette_inventory';
+    inventoryKey=n===60?'uc_roulette_inventory':n===30?'uc30_roulette_inventory':null; kind='code'; codePrefix='UC';
+  } else if(displayKind==='butterfly'){
+    value='Нож-бабочка'; label='Нож-бабочка'; inventoryKey='butterfly_roulette_inventory'; kind='code'; codePrefix='KNF';
   } else {
-    value=0; label='Ничего';
+    value=0; label='Ничего'; kind='nothing';
   }
-  return {id:slot.id,label,kind,value,weightKey:slot.weightKey,inventoryKey,weight:Math.max(0,Number(setting(slot.weightKey))||0)};
+  return {id:slot.id,label,kind,displayKind,value,codePrefix,weightKey:slot.weightKey,inventoryKey,weight:Math.max(0,Number(setting(slot.weightKey))||0)};
 }
 function settingText(k){ return db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value ?? ''; }
-
-function pickResult(){
-  const pool=rouletteSlots
-    .map(slotResult)
-    .filter(r => !r.inventoryKey || setting(r.inventoryKey) < 0 || setting(r.inventoryKey) > 0);
-  const scale=1000;
-  const weights=pool.map(r=>Math.max(0,Math.round(r.weight*scale)));
-  const total=weights.reduce((a,w)=>a+w,0);
-  if(total<=0) return {id:'nothing',label:'Ничего',kind:'nothing',value:0,weightKey:'weight_nothing',weight:1};
-  const finalTotal=scale*100;
-  let x=crypto.randomInt(finalTotal);
-  for(let i=0;i<pool.length;i++){ x-=weights[i]; if(x<0) return pool[i]; }
-  return {id:'unassigned',label:'Без награды',kind:'nothing',value:0,weightKey:null,weight:100-total/scale};
-}
 
 function now(){ return Math.floor(Date.now()/1000); }
 function setting(k){ return Number(db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value ?? 0); }
@@ -299,7 +287,7 @@ app.get('/api/telegram/diagnostics',async (req,res)=>{
 });
 
 app.get('/api/config',(req,res)=>{
-  const roulette=rouletteSlots.map(slot=>{ const r=slotResult(slot); return {id:slot.id,label:r.label,kind:r.kind,value:r.value,inventoryKey:r.inventoryKey}; });
+  const roulette=rouletteSlots.map(slot=>{ const r=slotResult(slot); return {id:slot.id,label:r.label,kind:r.displayKind||r.kind,value:r.value,inventoryKey:r.inventoryKey}; });
   res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,secondChannelUrl:SECOND_CHANNEL_URL,secondChannelUsername:SECOND_CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),freeSpinLimit:100,paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),secondChannelReward:setting('second_channel_reward'),rewardInventory:{discount25:setting('discount_roulette_inventory'),uc60:setting('uc_roulette_inventory'),uc30:setting('uc30_roulette_inventory'),butterfly:setting('butterfly_roulette_inventory')},roulette});
 });
 
@@ -346,7 +334,7 @@ app.post('/api/spin',(req,res)=>{
   tx();
   let code=null;
   if(result.kind==='code'){
-    const prefix=result.kind==='uc'?'UC':result.kind==='butterfly'?'KNF':result.kind==='discount'?'SALE':'REWARD';
+    const prefix=result.codePrefix || 'REWARD';
     code=randomCode(prefix);
     const expires=t+setting('code_days')*86400;
     db.prepare('INSERT INTO codes(code,user_id,reward_type,reward_value,source,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
