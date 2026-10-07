@@ -16,6 +16,8 @@ const BOT_USERNAME = process.env.BOT_USERNAME || '';
 const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
 const CHANNEL_ID = process.env.CHANNEL_ID || '';
 const CHANNEL_URL = process.env.CHANNEL_URL || '';
+const SECOND_CHANNEL_USERNAME = process.env.SECOND_CHANNEL_USERNAME || '@elitemetrof';
+const SECOND_CHANNEL_URL = process.env.SECOND_CHANNEL_URL || 'https://t.me/elitemetrof';
 
 // Telegram chat used for subscription checks. If CHANNEL_USERNAME is wrong
 // (for example a display title like "Elite Force"), derive the public
@@ -93,7 +95,6 @@ CREATE TABLE IF NOT EXISTS settings (
 
 const defaults = {
   free_spin_hours: '24',
-  free_spin_limit: '100',
   paid_spin_cost: '100',
   paid_spin_limit: '5',
   code_days: '10',
@@ -103,6 +104,7 @@ const defaults = {
   exchange_discount_percent: '25',
   referral_reward: '100',
   channel_reward: '50',
+  second_channel_reward: '50',
   weight_c50a: '15',
   weight_c100a: '10',
   weight_c150a: '7',
@@ -110,8 +112,13 @@ const defaults = {
   weight_c150b: '5',
   weight_discount25: '3',
   weight_uc60: '0.2',
+  weight_uc30: '0',
+  weight_butterfly: '0',
   weight_nothing: '53.8',
-  uc_roulette_inventory: '1'
+  uc_roulette_inventory: '1',
+  discount_roulette_inventory: '-1',
+  uc30_roulette_inventory: '0',
+  butterfly_roulette_inventory: '0'
 };
 const setDefault = db.prepare(`INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)`);
 for (const [k,v] of Object.entries(defaults)) setDefault.run(k,v);
@@ -124,8 +131,10 @@ const resultPool = [
   { id:'c150a', label:'150 монет', kind:'coins', value:150, weightKey:'weight_c150a' },
   { id:'c100b', label:'100 монет', kind:'coins', value:100, weightKey:'weight_c100b' },
   { id:'c150b', label:'150 монет', kind:'coins', value:150, weightKey:'weight_c150b' },
-  { id:'discount25', label:'Скидка 25%', kind:'code', value:'25% скидка', weightKey:'weight_discount25' },
-  { id:'uc60', label:'60 UC', kind:'code', value:'60 UC', weightKey:'weight_uc60' },
+  { id:'discount25', label:'Скидка 25%', kind:'code', value:'25% скидка', weightKey:'weight_discount25', inventoryKey:'discount_roulette_inventory' },
+  { id:'uc60', label:'60 UC', kind:'code', value:'60 UC', weightKey:'weight_uc60', inventoryKey:'uc_roulette_inventory' },
+  { id:'uc30', label:'30 UC', kind:'code', value:'30 UC', weightKey:'weight_uc30', inventoryKey:'uc30_roulette_inventory' },
+  { id:'butterfly', label:'Нож-бабочка', kind:'code', value:'Нож-бабочка', weightKey:'weight_butterfly', inventoryKey:'butterfly_roulette_inventory' },
   { id:'nothing', label:'Ничего', kind:'nothing', value:0, weightKey:'weight_nothing' }
 ];
 
@@ -138,9 +147,8 @@ function randomCode(prefix){
   return `${prefix}-${s}`;
 }
 function pickResult(){
-  const inventory = setting('uc_roulette_inventory');
   const pool=resultPool
-    .filter(r => r.id !== 'uc60' || inventory > 0)
+    .filter(r => !r.inventoryKey || setting(r.inventoryKey) < 0 || setting(r.inventoryKey) > 0)
     .map(r=>({...r,weight:Math.max(0,Number(setting(r.weightKey))||0)}));
   const scale=1000;
   let weights=pool.map(r=>Math.max(0,Math.round(r.weight*scale)));
@@ -181,8 +189,8 @@ async function tg(method, body={}){
   if(!j.ok) throw new Error(j.description || 'Telegram API error');
   return j.result;
 }
-async function isSubscribed(userId){
-  const chatId=effectiveChannelChatId();
+async function isSubscribed(userId, chatOverride=''){
+  const chatId=String(chatOverride).trim() || effectiveChannelChatId();
   if(!chatId) return false;
   try {
     const m=await tg('getChatMember',{chat_id:chatId,user_id:Number(userId)});
@@ -224,7 +232,7 @@ function requireAdmin(req,res){
 app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!effectiveChannelChatId(),webappConfigured:!!WEBAPP_URL}));
 
 app.get('/api/telegram/diagnostics',async (req,res)=>{
-  const out={botTokenConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!effectiveChannelChatId(),webappConfigured:!!WEBAPP_URL,channelId:CHANNEL_ID||null,channelUsername:CHANNEL_USERNAME||null,effectiveChannelChatId:effectiveChannelChatId()||null};
+  const out={secondChannelUsername:SECOND_CHANNEL_USERNAME,secondChannelUrl:SECOND_CHANNEL_URL,botTokenConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!effectiveChannelChatId(),webappConfigured:!!WEBAPP_URL,channelId:CHANNEL_ID||null,channelUsername:CHANNEL_USERNAME||null,effectiveChannelChatId:effectiveChannelChatId()||null};
   try{ const me=await tg('getMe'); out.bot={id:me.id,username:me.username,first_name:me.first_name}; }catch(e){ out.botError=e.message; }
   try{ const info=await tg('getWebhookInfo'); out.webhook={url:info.url||'',pending_update_count:info.pending_update_count||0,last_error_message:info.last_error_message||'',last_error_date:info.last_error_date||0}; }catch(e){ out.webhookError=e.message; }
   const chatId=effectiveChannelChatId();
@@ -235,22 +243,25 @@ app.get('/api/telegram/diagnostics',async (req,res)=>{
 });
 
 app.get('/api/config',(req,res)=>{
-  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),freeSpinLimit:setting('free_spin_limit'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
+  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,secondChannelUrl:SECOND_CHANNEL_URL,secondChannelUsername:SECOND_CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),freeSpinLimit:100,paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),secondChannelReward:setting('second_channel_reward'),rewardInventory:{discount25:setting('discount_roulette_inventory'),uc60:setting('uc_roulette_inventory'),uc30:setting('uc30_roulette_inventory'),butterfly:setting('butterfly_roulette_inventory')}});
 });
 
 app.get('/api/me',(req,res)=>{
   const x=requireUser(req,res); if(!x) return;
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(x.tgUser.id);
   db.prepare("UPDATE codes SET status='expired',updated_at=? WHERE user_id=? AND status='pending' AND expires_at<=?").run(now(),u.id,now());
+  // TEST MODE: 100 free spins per rolling 24 hours.
   const freeSince=now()-86400;
   const freeCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='free' AND created_at>?").get(u.id,freeSince).c;
-  const freeOldest=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' AND created_at>? ORDER BY created_at ASC LIMIT 1").get(u.id,freeSince)?.created_at||0;
+  const oldestFree=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' AND created_at>? ORDER BY created_at ASC LIMIT 1").get(u.id,freeSince)?.created_at||0;
+  const freeLimit=100;
   const paidSince=now()-86400;
   const paidCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='paid' AND created_at>?").get(u.id,paidSince).c;
   const claims=db.prepare('SELECT task_key FROM task_claims WHERE user_id=?').all(u.id).map(x=>x.task_key);
   const codes=db.prepare('SELECT code,reward_type,reward_value,status,expires_at,created_at FROM codes WHERE user_id=? ORDER BY created_at DESC').all(u.id);
   const referralCount=db.prepare('SELECT COUNT(*) c FROM users WHERE referred_by=?').get(u.id).c;
-  res.json({user:u,referralCount,freeUsed:freeCount,freeLeft:Math.max(0,setting('free_spin_limit')-freeCount),freeAvailable:freeCount<setting('free_spin_limit'),freeNextAt:freeCount>=setting('free_spin_limit')&&freeOldest?freeOldest+86400:0,paidUsed:paidCount,paidLeft:Math.max(0,setting('paid_spin_limit')-paidCount),claims,codes,admin:String(u.id)===ADMIN_ID});
+  const freeLeft=Math.max(0,freeLimit-freeCount);
+  res.json({user:u,referralCount,freeAvailable:freeLeft>0,freeUsed:freeCount,freeLeft,freeLimit,freeNextAt:freeLeft>0?0:oldestFree+86400,paidUsed:paidCount,paidLeft:Math.max(0,setting('paid_spin_limit')-paidCount),claims,codes,admin:String(u.id)===ADMIN_ID});
 });
 
 app.post('/api/spin',(req,res)=>{
@@ -258,11 +269,12 @@ app.post('/api/spin',(req,res)=>{
   const paid=!!req.body.paid;
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(x.tgUser.id);
   db.prepare("UPDATE codes SET status='expired',updated_at=? WHERE user_id=? AND status='pending' AND expires_at<=?").run(now(),u.id,now());
+  // TEST MODE: allow up to 100 free spins in any rolling 24-hour window.
   const freeSince=now()-86400;
   const freeCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='free' AND created_at>?").get(u.id,freeSince).c;
-  if(!paid && freeCount>=setting('free_spin_limit')){
-    const oldestFree=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' AND created_at>? ORDER BY created_at ASC LIMIT 1").get(u.id,freeSince)?.created_at||0;
-    return res.status(400).json({error:'Лимит бесплатных прокрутов за 24 часа исчерпан',nextAt:oldestFree?oldestFree+86400:now()+86400});
+  if(!paid && freeCount>=100){
+    const oldestFree=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' AND created_at>? ORDER BY created_at ASC LIMIT 1").get(u.id,freeSince)?.created_at||now();
+    return res.status(400).json({error:'Лимит бесплатных прокрутов за 24 часа исчерпан',nextAt:oldestFree+86400});
   }
   const paidCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='paid' AND created_at>?").get(u.id,now()-86400).c;
   if(paid && paidCount>=setting('paid_spin_limit')) return res.status(400).json({error:'Лимит платных прокрутов за 24 часа исчерпан'});
@@ -277,12 +289,12 @@ app.post('/api/spin',(req,res)=>{
   tx();
   let code=null;
   if(result.kind==='code'){
-    const prefix=result.id==='uc60'?'UC':'SALE';
+    const prefix=result.id==='uc60'?'UC60':result.id==='uc30'?'UC30':result.id==='butterfly'?'KNF':'SALE';
     code=randomCode(prefix);
     const expires=t+setting('code_days')*86400;
     db.prepare('INSERT INTO codes(code,user_id,reward_type,reward_value,source,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
       .run(code,u.id,result.id,result.value,'spin',expires,t,t);
-    if(result.id==='uc60') db.prepare("UPDATE settings SET value=CAST(value AS REAL)-1 WHERE key='uc_roulette_inventory' AND CAST(value AS REAL)>0").run();
+    if(result.inventoryKey) db.prepare("UPDATE settings SET value=CAST(value AS REAL)-1 WHERE key=? AND CAST(value AS REAL)>0").run(result.inventoryKey);
     notifyAdmin(`🎰 <b>Новый выигрыш</b>\n👤 ${escapeHtml(u.username?'@'+u.username:u.first_name)}\n🆔 ${u.id}\n🎁 ${escapeHtml(result.label)}\n🔑 <code>${code}</code>\n⏳ Код действует 10 дней.`);
   }
   if(!u.first_spin_done){
@@ -290,6 +302,21 @@ app.post('/api/spin',(req,res)=>{
     maybeRewardReferral(u.id,t);
   }
   res.json({result:{...result,code,expiresAt:code?t+setting('code_days')*86400:null},coins:db.prepare('SELECT coins FROM users WHERE id=?').get(u.id).coins});
+});
+
+app.post('/api/task/second-channel/claim',async (req,res)=>{
+  const x=requireUser(req,res); if(!x) return;
+  const u=x.u;
+  const taskKey='second_channel';
+  if(db.prepare('SELECT 1 FROM task_claims WHERE user_id=? AND task_key=?').get(u.id,taskKey)) return res.status(400).json({error:'Задание уже выполнено'});
+  if(!(await isSubscribed(u.id, SECOND_CHANNEL_USERNAME))) return res.status(400).json({error:'Сначала подпишитесь на второй канал'});
+  const t=now();
+  const reward=setting('second_channel_reward');
+  const tx=db.transaction(()=>{
+    db.prepare('UPDATE users SET coins=coins+?,updated_at=? WHERE id=?').run(reward,t,u.id);
+    db.prepare('INSERT INTO task_claims(user_id,task_key,created_at) VALUES(?,?,?)').run(u.id,taskKey,t);
+  }); tx();
+  res.json({ok:true,reward,coins:db.prepare('SELECT coins FROM users WHERE id=?').get(u.id).coins});
 });
 
 app.post('/api/task/channel/claim',async (req,res)=>{
@@ -378,11 +405,45 @@ app.get('/api/admin/users',(req,res)=>{
   const rows=db.prepare(`SELECT u.id,u.username,u.first_name,u.coins,u.created_at,u.updated_at, (SELECT COUNT(*) FROM spins s WHERE s.user_id=u.id) AS spins, (SELECT COUNT(*) FROM codes c WHERE c.user_id=u.id) AS codes FROM users u ORDER BY u.updated_at DESC LIMIT 200`).all();
   res.json({users:rows});
 });
+app.post('/api/admin/gift-150',async (req,res)=>{
+  if(!requireAdmin(req,res)) return;
+  const amount=150;
+  const t=now();
+  const users=db.prepare('SELECT id FROM users ORDER BY id').all();
+  const addCoins=db.prepare('UPDATE users SET coins=coins+?,updated_at=? WHERE id=?');
+  const tx=db.transaction((rows)=>{
+    for(const u of rows) addCoins.run(amount,t,u.id);
+  });
+  try {
+    tx(users);
+  } catch(e) {
+    return res.status(500).json({error:'Не удалось начислить подарок всем пользователям'});
+  }
+
+  // Начисление уже сохранено в базе. Уведомления отправляем отдельно, чтобы
+  // временная ошибка Telegram не могла отменить начисление монет.
+  let sent=0, failed=0;
+  for(const u of users){
+    try {
+      await tg('sendMessage',{
+        chat_id:Number(u.id),
+        text:'🎁 <b>Администратор подарил вам 150 монет!</b>\n\nВаш баланс увеличен на 150 🪙.',
+        parse_mode:'HTML'
+      });
+      sent++;
+    } catch {
+      failed++;
+    }
+    // Не превышаем обычный лимит рассылки Telegram.
+    await new Promise(resolve=>setTimeout(resolve,40));
+  }
+  res.json({ok:true,amount,total:users.length,sent,failed});
+});
 app.post('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
-  const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','free_spin_limit','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_nothing','uc_roulette_inventory'];
+  const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_uc30','weight_butterfly','weight_nothing','uc_roulette_inventory','discount_roulette_inventory','uc30_roulette_inventory','butterfly_roulette_inventory'];
   const update=db.prepare('UPDATE settings SET value=? WHERE key=?');
-  const weightKeys=['weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_nothing'];
+  const weightKeys=['weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_uc30','weight_butterfly','weight_nothing'];
   const submittedWeights=weightKeys.filter(k=>req.body[k]!==undefined);
   if(submittedWeights.length){
     if(submittedWeights.length!==weightKeys.length) return res.status(400).json({error:'Нужно указать шанс для всех результатов рулетки'});
@@ -394,6 +455,8 @@ app.post('/api/admin/settings',(req,res)=>{
     if(req.body[k]===undefined) continue;
     const n=Number(req.body[k]);
     if(!Number.isFinite(n)) return res.status(400).json({error:`Некорректное значение: ${k}`});
+    if(['uc_roulette_inventory','uc30_roulette_inventory','butterfly_roulette_inventory'].includes(k) && n<0) return res.status(400).json({error:`Количество ${k} не может быть отрицательным`});
+    if(k==='discount_roulette_inventory' && n<-1) return res.status(400).json({error:'Количество скидок: -1 или 0 и больше'});
     if(['exchange_discount_coins','exchange_coins','exchange_uc','code_days'].includes(k) && n<1) return res.status(400).json({error:`Значение ${k} должно быть больше 0`});
     if(k==='exchange_discount_percent' && (n<1 || n>100)) return res.status(400).json({error:'Процент скидки должен быть от 1 до 100'});
     if(k==='code_days' && n>365) return res.status(400).json({error:'Срок кода не может быть больше 365 дней'});

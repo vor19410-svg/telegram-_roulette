@@ -49,15 +49,15 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .wheel{
   position:absolute;inset:0;border-radius:50%;transform:rotate(0deg);transition:transform 5s cubic-bezier(.12,.74,.15,1);will-change:transform;
   background:
-    conic-gradient(from -22.5deg,
-      #7025aa 0 12.5%,#4a2375 12.5% 25%,#912ca8 25% 37.5%,#35205b 37.5% 50%,
-      #7d239b 50% 62.5%,#2a1949 62.5% 75%,#6a1f98 75% 87.5%,#21152f 87.5% 100%);
+    conic-gradient(from -18deg,
+      #7025aa 0 10%,#4a2375 10% 20%,#912ca8 20% 30%,#35205b 30% 40%,#7d239b 40% 50%,
+      #2a1949 50% 60%,#6a1f98 60% 70%,#21152f 70% 80%,#7b2aa0 80% 90%,#3a235e 90% 100%);
   border:7px solid #b98318;box-shadow:0 0 0 3px #f5d46b55,0 0 30px #7c27de66,inset 0 0 25px #000;
 }
 .wheel:before{content:"";position:absolute;inset:15px;border-radius:50%;border:1px solid #f6d56a66}
-.segment{position:absolute;left:50%;top:50%;width:72px;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;text-align:center;color:#fff;line-height:1.05;text-shadow:0 2px 4px #000;transform:translate(-50%,-50%) rotate(var(--label-rotation, 0deg));z-index:2}
-.s1{left:50%;top:21%}.s2{left:73%;top:29%}.s3{left:79%;top:50%}.s4{left:72%;top:72%}
-.s5{left:50%;top:80%}.s6{left:28%;top:72%}.s7{left:21%;top:50%}.s8{left:28%;top:29%}
+.segment{position:absolute;left:50%;top:50%;width:72px;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:900;text-align:center;color:#fff;line-height:1.05;text-shadow:0 2px 4px #000;transform:translate(-50%,-50%) rotate(var(--label-rotation, 0deg));z-index:2}.segment .stock{display:block;margin-top:3px;font-size:8px;font-weight:700;color:#c8bdcf;opacity:.72;letter-spacing:.1px}
+.s1{left:50%;top:18%}.s2{left:68%;top:25%}.s3{left:79%;top:40%}.s4{left:79%;top:60%}.s5{left:68%;top:75%}
+.s6{left:50%;top:82%}.s7{left:32%;top:75%}.s8{left:21%;top:60%}.s9{left:21%;top:40%}.s10{left:32%;top:25%}
 .pointer{position:absolute;z-index:4;top:-3px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;border-top:30px solid var(--gold);filter:drop-shadow(0 2px 3px #000)}
 .center{position:absolute;z-index:5;left:50%;top:50%;transform:translate(-50%,-50%);width:78px;height:78px;border-radius:50%;display:grid;place-items:center;text-align:center;background:radial-gradient(circle at 35% 30%,#ffe96b,#c98e0b);color:#241700;border:5px solid #8d6210;font-size:12px;font-weight:900;box-shadow:0 5px 18px #000b}
 .spinStatus{margin:10px 0 0;color:#cfc5da;font-size:12px;min-height:18px}.result{margin-top:10px;padding:12px;border:1px solid #6f4a9a;border-radius:12px;background:linear-gradient(135deg,#1b1029,#100a18);text-align:center}.result b{display:block;color:var(--gold2);font-size:20px;margin-top:4px}.note{font-size:11px;color:var(--muted);line-height:1.4}
@@ -76,7 +76,10 @@ button:disabled{opacity:.45;cursor:not-allowed}
 
 .codeRow{margin-top:8px;padding:10px;border:1px solid #3b2a4d;border-radius:12px;background:#0d0914}
 .codeMeta{font-size:11px;color:var(--muted);line-height:1.45;margin-top:4px}
-.codeActions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
+.codeActions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}.adminPager{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:10px}
+.adminPager button{flex:1}
+.adminPager .pageInfo{flex:0 0 auto;min-width:120px;text-align:center}
+
 .statusPending{color:var(--gold2)}.statusIssued{color:var(--green)}.statusCancelled,.statusExpired{color:var(--danger)}
 
 .rewardOverlay{position:fixed;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(7px);display:flex;align-items:center;justify-content:center;padding:18px;z-index:9999}
@@ -120,17 +123,19 @@ button:disabled{opacity:.45;cursor:not-allowed}
         <div class="wheel">
           <div class="segment s1">150<br>🪙</div>
           <div class="segment s2">100<br>🪙</div>
-          <div class="segment s3">СКИДКА<br>25%</div>
-          <div class="segment s4">50<br>🪙</div>
-          <div class="segment s5">НИЧЕГО</div>
-          <div class="segment s6">60<br>UC</div>
-          <div class="segment s7">100<br>🪙</div>
-          <div class="segment s8">150<br>🪙</div>
+          <div class="segment s3">СКИДКА<br>25%<span class="stock" data-stock="discount25"></span></div>
+          <div class="segment s4">30<br>UC<span class="stock" data-stock="uc30"></span></div>
+          <div class="segment s5">НОЖ-БАБОЧКА<span class="stock" data-stock="butterfly"></span></div>
+          <div class="segment s6">НИЧЕГО</div>
+          <div class="segment s7">60<br>UC<span class="stock" data-stock="uc60"></span></div>
+          <div class="segment s8">100<br>🪙</div>
+          <div class="segment s9">150<br>🪙</div>
+          <div class="segment s10">50<br>🪙</div>
         </div>
         <div class="center">VIEW</div>
       </div>
 
-      <div class="spinStatus" id="spinStatus">Бесплатный прокрут доступен</div>
+      <div class="spinStatus" id="spinStatus">Бесплатных прокрутов: 100/100 за 24 часа</div>
       <div class="actions">
         <button id="spinButton" class="primary" onclick="spin()">🎡 Бесплатный прокрут</button>
         <button id="paidSpinButton" class="secondary" onclick="paidSpin()">🪙 Прокрут за 100 монет</button>
@@ -147,6 +152,11 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <b>📢 Подписка на канал</b>
       <div class="small">Проверь подписку после перехода в Telegram-канал.</div>
       <div class="grid"><button class="primary" onclick="openChannel()">Перейти</button><button class="secondary" onclick="claimChannel()">Проверить</button></div>
+    </div>
+    <div class="item">
+      <b>📢 Подписка на второй канал</b>
+      <div class="small">Metro shop Elite Force · +50 🪙 за одно выполнение.</div>
+      <div class="grid"><button class="primary" onclick="openSecondChannel()">Перейти</button><button class="secondary" onclick="claimSecondChannel()">Проверить</button></div>
     </div>
   </section>
 
@@ -199,11 +209,18 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <b>👥 Пользователи</b>
       <div class="small" style="margin-top:5px">Последние 200 пользователей, баланс и активность.</div>
       <div id="adminUsers" style="margin-top:8px">Загрузка…</div>
+      <div id="adminUsersPager"></div>
+    </div>
+    <div class="item">
+      <b>🎁 Подарок всем пользователям</b>
+      <div class="small" style="margin-top:5px">Нажми кнопку, чтобы начислить каждому зарегистрированному пользователю 150 🪙 и отправить уведомление от бота.</div>
+      <button id="gift150Btn" class="primary" style="width:100%;margin-top:10px" onclick="gift150ToAll()">🎁 Подарить 150 🪙 всем</button>
     </div>
     <div class="item">
       <b>🎟️ Коды наград</b>
       <div class="small" style="margin-top:5px">Здесь появляются коды, которые сервер выдал пользователям за награды. Ты можешь отметить код как выданный или аннулировать его.</div>
       <div id="adminCodes" style="margin-top:8px">Загрузка…</div>
+      <div id="adminCodesPager"></div>
     </div>
   </section>
 
@@ -222,9 +239,22 @@ button:disabled{opacity:.45;cursor:not-allowed}
         <label>🪙 150 монет, % (2)<input id="setWeightC150b" type="number" min="0" max="100" step="0.1"></label>
         <label>🏷️ Скидка 25%, %<input id="setWeightDiscount25" type="number" min="0" max="100" step="0.1"></label>
         <label>🎮 60 UC, %<input id="setWeightUc60" type="number" min="0" max="100" step="0.1"></label>
+        <label>🎮 30 UC, %<input id="setWeightUc30" type="number" min="0" max="100" step="0.1"></label>
+        <label>🔪 Нож-бабочка, %<input id="setWeightButterfly" type="number" min="0" max="100" step="0.1"></label>
         <label>😕 Ничего, %<input id="setWeightNothing" type="number" min="0" max="100" step="0.1"></label>
       </div>
       <div id="weightTotal" class="small" style="margin-top:10px">Всего задано: —%</div><div class="small">Сумма может быть меньше 100%. Каждый указанный процент остаётся именно своим шансом; остаток — отдельный исход без награды. Сумма больше 100% запрещена.</div>
+    </div>
+    <div class="item">
+      <b>📦 Количество наград в наличии</b>
+      <div class="small" style="margin-top:5px">Количество можно менять независимо от шанса. На рулетке оно показывается мелко под названием.</div>
+      <div class="grid" style="margin-top:10px">
+        <label>🏷️ Скидка 25%, шт.<input id="setInventoryDiscount25" type="number" min="-1" step="1"></label>
+        <label>🎮 60 UC, шт.<input id="setInventoryUc60" type="number" min="0" step="1"></label>
+        <label>🎮 30 UC, шт.<input id="setInventoryUc30" type="number" min="0" step="1"></label>
+        <label>🔪 Нож-бабочка, шт.<input id="setInventoryButterfly" type="number" min="0" step="1"></label>
+      </div>
+      <div class="small" style="margin-top:7px">Для скидки −1 = без ограничения количества.</div>
     </div>
     <div class="item">
       <b>🎁 Настройки обмена</b>
@@ -258,9 +288,12 @@ let me=null,cfg=null;
 // Load public configuration independently of Telegram authentication so the
 // channel button can always work even if the user session needs re-auth.
 async function loadPublicConfig(){
-  try{ cfg=await (await fetch('/api/config',{cache:'no-store'})).json(); if(cfg){ cfg.freeSpinHours=Number(cfg.freeSpinHours||24); cfg.freeSpinLimit=Number(cfg.freeSpinLimit||100); } }catch(e){ cfg=cfg||{}; }
+  try{ cfg=await (await fetch('/api/config',{cache:'no-store'})).json(); if(cfg) cfg.freeSpinHours=Number(cfg.freeSpinHours||24); renderRewardStocks?.(); }catch(e){ cfg=cfg||{}; }
 }
 loadPublicConfig();
+function formatRewardStock(v){ const n=Number(v); return n<0?'∞ шт.':`${Math.max(0,Math.floor(n))} шт.`; }
+function renderRewardStocks(){ document.querySelectorAll('[data-stock]').forEach(el=>{ const k=el.dataset.stock; el.textContent=formatRewardStock(cfg?.rewardInventory?.[k] ?? 0); }); }
+setTimeout(renderRewardStocks,0);
 
 async function api(path,opts={}){
   opts.headers={...(opts.headers||{}),'Content-Type':'application/json','X-Telegram-Init-Data':initData};
@@ -311,10 +344,112 @@ function renderMyCodes(){
       </div>
     </div>`).join('');
 }
+let adminUsersData=[];
+let adminCodesData=[];
+let adminUsersPage=1;
+let adminCodesPage=1;
+const ADMIN_PAGE_SIZE=20;
+
+function renderAdminPager(containerId,page,total,onPage){
+  const box=document.getElementById(containerId);
+  if(!box) return;
+  const pages=Math.max(1,Math.ceil(total/ADMIN_PAGE_SIZE));
+  page=Math.min(Math.max(1,page),pages);
+  box.innerHTML=total<=ADMIN_PAGE_SIZE?'':`<div class="adminPager">
+    <button class="secondary" ${page<=1?'disabled':''} onclick="${onPage}(${page-1})">⬅️ Назад</button>
+    <div class="pageInfo small">Страница ${page} из ${pages}</div>
+    <button class="secondary" ${page>=pages?'disabled':''} onclick="${onPage}(${page+1})">Вперёд ➡️</button>
+  </div>`;
+}
+
+function renderAdminUsers(){
+  const box=document.getElementById('adminUsers');
+  if(!box) return;
+  const total=adminUsersData.length;
+  if(!total){
+    box.innerHTML='<div class="small">Пользователей пока нет.</div>';
+    renderAdminPager('adminUsersPager',1,0,'goAdminUsersPage');
+    return;
+  }
+  const pages=Math.ceil(total/ADMIN_PAGE_SIZE);
+  adminUsersPage=Math.min(Math.max(1,adminUsersPage),pages);
+  const start=(adminUsersPage-1)*ADMIN_PAGE_SIZE;
+  const rows=adminUsersData.slice(start,start+ADMIN_PAGE_SIZE);
+  box.innerHTML=rows.map(u=>{
+    const who=escapeHtmlClient(u.username?('@'+u.username):u.first_name||'Без имени');
+    return `<div class="codeRow"><div class="code">${who}</div><div class="codeMeta">ID: ${u.id}<br>Баланс: ${u.coins} 🪙 · Прокруты: ${u.spins} · Коды: ${u.codes}<br>Регистрация: ${new Date(Number(u.created_at)*1000).toLocaleString('ru-RU')}</div></div>`;
+  }).join('');
+  renderAdminPager('adminUsersPager',adminUsersPage,total,'goAdminUsersPage');
+}
+
+function goAdminUsersPage(page){
+  adminUsersPage=Number(page)||1;
+  renderAdminUsers();
+}
+
+function renderAdminCodes(){
+  const box=document.getElementById('adminCodes');
+  if(!box) return;
+  const total=adminCodesData.length;
+  if(!total){
+    box.innerHTML='<div class="small">Кодов пока нет.</div>';
+    renderAdminPager('adminCodesPager',1,0,'goAdminCodesPage');
+    return;
+  }
+  const pages=Math.ceil(total/ADMIN_PAGE_SIZE);
+  adminCodesPage=Math.min(Math.max(1,adminCodesPage),pages);
+  const start=(adminCodesPage-1)*ADMIN_PAGE_SIZE;
+  const rows=adminCodesData.slice(start,start+ADMIN_PAGE_SIZE);
+  box.innerHTML=rows.map(row=>{
+    const who=escapeHtmlClient(row.username?('@'+row.username):row.first_name||row.user_id);
+    const canAct=row.status==='pending';
+    return `<div class="codeRow">
+      <div class="code">${escapeHtmlClient(row.code)}</div>
+      <div class="codeMeta">
+        Пользователь: ${who} (ID ${row.user_id})<br>
+        Награда: ${escapeHtmlClient(row.reward_value)} ${escapeHtmlClient(row.reward_type)}<br>
+        Статус: <span class="${row.status==='pending'?'statusPending':row.status==='issued'?'statusIssued':row.status==='expired'?'statusExpired':'statusCancelled'}">${codeStatusLabel(row.status)}</span><br>
+        Действует до: ${row.expires_at ? new Date(Number(row.expires_at)*1000).toLocaleString('ru-RU') : '—'}
+      </div>
+      ${canAct?`<div class="codeActions">
+        <button class="primary" onclick="setCodeStatus(${Number(row.id)},'issued')">✅ Выдано</button>
+        <button class="secondary" onclick="setCodeStatus(${Number(row.id)},'cancelled')">✖ Аннулировать</button>
+      </div>`:''}
+    </div>`;
+  }).join('');
+  renderAdminPager('adminCodesPager',adminCodesPage,total,'goAdminCodesPage');
+}
+
+function goAdminCodesPage(page){
+  adminCodesPage=Number(page)||1;
+  renderAdminCodes();
+}
+
+async function gift150ToAll(){
+  if(!me?.admin) return;
+  const ok=confirm('Подарить каждому зарегистрированному пользователю 150 🪙?\n\nЭто действие можно повторить, и при повторном нажатии пользователи снова получат 150 🪙.');
+  if(!ok) return;
+  const btn=document.getElementById('gift150Btn');
+  if(btn){btn.disabled=true;btn.textContent='⏳ Начисляем и отправляем…';}
+  try{
+    const r=await api('/api/admin/gift-150',{method:'POST'});
+    toast(`🎁 Выдано 150 🪙: ${r.total}. Уведомлений отправлено: ${r.sent}.`);
+  }catch(e){
+    toast(e.message||'Не удалось выполнить подарок');
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🎁 Подарить 150 🪙 всем';}
+  }
+}
+
 async function loadAdmin(){
   if(!me?.admin) return;
   try{
-    const [s,c,settings]=await Promise.all([api('/api/admin/stats'),api('/api/admin/codes'),api('/api/admin/settings')]);
+    const [s,c,settings,users]=await Promise.all([
+      api('/api/admin/stats'),
+      api('/api/admin/codes'),
+      api('/api/admin/settings'),
+      api('/api/admin/users')
+    ]);
     document.getElementById('setDiscountCoins').value=settings.exchange_discount_coins??800;
     document.getElementById('setDiscountPercent').value=settings.exchange_discount_percent??25;
     document.getElementById('setUcCoins').value=settings.exchange_coins??3500;
@@ -330,43 +465,21 @@ async function loadAdmin(){
         <div class="item">Обменов<br><b>${s.exchangeCodes}</b></div>
         <div class="item">Ожидают<br><b>${s.pendingCodes}</b></div>
       </div>`;
-    const users=await api('/api/admin/users');
-    const usersBox=document.getElementById('adminUsers');
-    if(usersBox){
-      usersBox.innerHTML=users.users?.length?users.users.map(u=>{
-        const who=escapeHtmlClient(u.username?('@'+u.username):u.first_name||'Без имени');
-        return `<div class="codeRow"><div class="code">${who}</div><div class="codeMeta">ID: ${u.id}<br>Баланс: ${u.coins} 🪙 · Прокруты: ${u.spins} · Коды: ${u.codes}<br>Регистрация: ${new Date(Number(u.created_at)*1000).toLocaleString('ru-RU')}</div></div>`;
-      }).join(''):'<div class="small">Пользователей пока нет.</div>';
-    }
-    const box=document.getElementById('adminCodes');
-    if(!c.codes?.length){box.innerHTML='<div class="small">Кодов пока нет.</div>';return}
-    box.innerHTML=c.codes.map(row=>{
-      const who=escapeHtmlClient(row.username?('@'+row.username):row.first_name||row.user_id);
-      const canAct=row.status==='pending';
-      return `<div class="codeRow">
-        <div class="code">${escapeHtmlClient(row.code)}</div>
-        <div class="codeMeta">
-          Пользователь: ${who} (ID ${row.user_id})<br>
-          Награда: ${escapeHtmlClient(row.reward_value)} ${escapeHtmlClient(row.reward_type)}<br>
-          Статус: <span class="${row.status==='pending'?'statusPending':row.status==='issued'?'statusIssued':row.status==='expired'?'statusExpired':'statusCancelled'}">${codeStatusLabel(row.status)}</span><br>
-          Действует до: ${row.expires_at ? new Date(Number(row.expires_at)*1000).toLocaleString('ru-RU') : '—'}
-        </div>
-        ${canAct?`<div class="codeActions">
-          <button class="primary" onclick="setCodeStatus(${Number(row.id)},'issued')">✅ Выдано</button>
-          <button class="secondary" onclick="setCodeStatus(${Number(row.id)},'cancelled')">✖ Аннулировать</button>
-        </div>`:''}
-      </div>`;
-    }).join('');
+    adminUsersData=Array.isArray(users.users)?users.users:[];
+    adminCodesData=Array.isArray(c.codes)?c.codes:[];
+    renderAdminUsers();
+    renderAdminCodes();
   }catch(e){toast(e.message)}
 }
+
 function updateWeightTotal(){
-  const ids=['setWeightC50a','setWeightC100a','setWeightC150a','setWeightC100b','setWeightC150b','setWeightDiscount25','setWeightUc60','setWeightNothing'];
+  const ids=['setWeightC50a','setWeightC100a','setWeightC150a','setWeightC100b','setWeightC150b','setWeightDiscount25','setWeightUc60','setWeightUc30','setWeightButterfly','setWeightNothing'];
   const total=ids.reduce((sum,id)=>sum+(Number(document.getElementById(id)?.value)||0),0);
   const el=document.getElementById('weightTotal');
   if(el) el.textContent=`Всего задано: ${total.toFixed(1)}% ${total<=100.000001?'✅ Остаток автоматически — «Ничего»':'⚠️ Сумма не может быть больше 100%'}`;
 }
 function bindWeightInputs(){
-  ['setWeightC50a','setWeightC100a','setWeightC150a','setWeightC100b','setWeightC150b','setWeightDiscount25','setWeightUc60','setWeightNothing'].forEach(id=>{
+  ['setWeightC50a','setWeightC100a','setWeightC150a','setWeightC100b','setWeightC150b','setWeightDiscount25','setWeightUc60','setWeightUc30','setWeightButterfly','setWeightNothing'].forEach(id=>{
     document.getElementById(id)?.addEventListener('input',updateWeightTotal);
   });
 }
@@ -386,7 +499,13 @@ async function loadRewardSettings(){
     document.getElementById('setWeightC150b').value=settings.weight_c150b??5;
     document.getElementById('setWeightDiscount25').value=settings.weight_discount25??3;
     document.getElementById('setWeightUc60').value=settings.weight_uc60??0.2;
+    document.getElementById('setWeightUc30').value=settings.weight_uc30??0;
+    document.getElementById('setWeightButterfly').value=settings.weight_butterfly??0;
     document.getElementById('setWeightNothing').value=settings.weight_nothing??53.8;
+    document.getElementById('setInventoryDiscount25').value=settings.discount_roulette_inventory??-1;
+    document.getElementById('setInventoryUc60').value=settings.uc_roulette_inventory??1;
+    document.getElementById('setInventoryUc30').value=settings.uc30_roulette_inventory??0;
+    document.getElementById('setInventoryButterfly').value=settings.butterfly_roulette_inventory??0;
     bindWeightInputs(); updateWeightTotal();
   }catch(e){toast(e.message||'Не удалось загрузить настройки');}
 }
@@ -406,17 +525,24 @@ async function saveAdminSettings(){
       weight_c150b:Number(document.getElementById('setWeightC150b').value),
       weight_discount25:Number(document.getElementById('setWeightDiscount25').value),
       weight_uc60:Number(document.getElementById('setWeightUc60').value),
-      weight_nothing:Number(document.getElementById('setWeightNothing').value)
+      weight_uc30:Number(document.getElementById('setWeightUc30').value),
+      weight_butterfly:Number(document.getElementById('setWeightButterfly').value),
+      weight_nothing:Number(document.getElementById('setWeightNothing').value),
+      uc_roulette_inventory:Number(document.getElementById('setInventoryUc60').value),
+      discount_roulette_inventory:Number(document.getElementById('setInventoryDiscount25').value),
+      uc30_roulette_inventory:Number(document.getElementById('setInventoryUc30').value),
+      butterfly_roulette_inventory:Number(document.getElementById('setInventoryButterfly').value)
     };
     if(!payload.exchange_discount_coins||!payload.exchange_coins||!payload.exchange_uc||!payload.code_days){toast('Заполни все поля');return}
     if(payload.exchange_discount_percent<1||payload.exchange_discount_percent>100){toast('Скидка должна быть от 1 до 100%');return}
     if(payload.code_days<1||payload.code_days>365){toast('Срок кода: от 1 до 365 дней');return}
-    const odds=[payload.weight_c50a,payload.weight_c100a,payload.weight_c150a,payload.weight_c100b,payload.weight_c150b,payload.weight_discount25,payload.weight_uc60,payload.weight_nothing];
+    const odds=[payload.weight_c50a,payload.weight_c100a,payload.weight_c150a,payload.weight_c100b,payload.weight_c150b,payload.weight_discount25,payload.weight_uc60,payload.weight_uc30,payload.weight_butterfly,payload.weight_nothing];
     if(odds.some(x=>x<0||x>100||!Number.isFinite(x))){toast('Шансы должны быть от 0 до 100%');return}
     const total=odds.reduce((a,b)=>a+b,0);
     if(total>100.000001){toast(`Сумма шансов не может быть больше 100%. Сейчас ${total.toFixed(1)}%`);return}
     const saved=await api('/api/admin/settings',{method:'POST',body:JSON.stringify(payload)});
     const settings=saved?.settings||payload;
+    cfg=cfg||{}; cfg.rewardInventory={discount25:Number(settings.discount_roulette_inventory??payload.discount_roulette_inventory),uc60:Number(settings.uc_roulette_inventory??payload.uc_roulette_inventory),uc30:Number(settings.uc30_roulette_inventory??payload.uc30_roulette_inventory),butterfly:Number(settings.butterfly_roulette_inventory??payload.butterfly_roulette_inventory)}; renderRewardStocks();
     const ids={
       exchange_discount_coins:'setDiscountCoins',
       exchange_discount_percent:'setDiscountPercent',
@@ -430,7 +556,13 @@ async function saveAdminSettings(){
       weight_c150b:'setWeightC150b',
       weight_discount25:'setWeightDiscount25',
       weight_uc60:'setWeightUc60',
-      weight_nothing:'setWeightNothing'
+      weight_uc30:'setWeightUc30',
+      weight_butterfly:'setWeightButterfly',
+      weight_nothing:'setWeightNothing',
+      uc_roulette_inventory:'setInventoryUc60',
+      discount_roulette_inventory:'setInventoryDiscount25',
+      uc30_roulette_inventory:'setInventoryUc30',
+      butterfly_roulette_inventory:'setInventoryButterfly'
     };
     for(const [key,id] of Object.entries(ids)){
       const el=document.getElementById(id);
@@ -532,6 +664,9 @@ async function loadMe(){
     if(!initData){toast('Telegram не передал данные Mini App. Закрой приложение и открой его кнопкой «Открыть рулетку» в Telegram.');return}
     me=await api('/api/me');
     if(!cfg) await loadPublicConfig();
+function formatRewardStock(v){ const n=Number(v); return n<0?'∞ шт.':`${Math.max(0,Math.floor(n))} шт.`; }
+function renderRewardStocks(){ document.querySelectorAll('[data-stock]').forEach(el=>{ const k=el.dataset.stock; el.textContent=formatRewardStock(cfg?.rewardInventory?.[k] ?? 0); }); }
+setTimeout(renderRewardStocks,0);
     refreshExchangeBalance();
     document.getElementById('coins').textContent=me.user.coins??0;
     document.getElementById('playerName').textContent=me.user.first_name||'Elite Player';
@@ -567,6 +702,19 @@ function openChannel(){
   }catch(e){}
   try{ window.location.href=url; }catch(e){ window.open(url,'_blank'); }
 }
+function openSecondChannel(){
+  let url=String(cfg?.secondChannelUrl||'https://t.me/elitemetrof').trim();
+  if(!/^https?:\/\//i.test(url)){toast('Неверная ссылка на второй канал');return}
+  try{
+    if(tg?.openTelegramLink){ tg.openTelegramLink(url); return; }
+    if(tg?.openLink){ tg.openLink(url); return; }
+  }catch(e){}
+  try{ window.location.href=url; }catch(e){ window.open(url,'_blank'); }
+}
+async function claimSecondChannel(){
+  try{const j=await api('/api/task/second-channel/claim',{method:'POST'});toast(`Второе задание выполнено. +${j.reward} 🪙`);loadMe()}
+  catch(e){toast(e.message||'Не удалось проверить подписку')}
+}
 async function claimChannel(){
   try{const j=await api('/api/task/channel/claim',{method:'POST'});toast(`Задание выполнено. +${j.reward} 🪙`);loadMe()}
   catch(e){toast(e.message)}
@@ -577,7 +725,7 @@ function copyRef(){
   toast('Ссылка скопирована');
 }
 
-const wheelOrder=['c150a','c100a','discount25','c50a','nothing','uc60','c100b','c150b'];
+const wheelOrder=['c150a','c100a','discount25','uc30','butterfly','nothing','uc60','c100b','c150b','c50a'];
 let wheelRotation=0;
 function syncWheelLabels(){
   const wheel=document.querySelector('.wheel');
@@ -609,21 +757,19 @@ function updateSpinState(){
     paidBtn.disabled=spinning || Number(me.paidLeft||0)<=0 || Number(me.user?.coins||0)<Number(cfg?.paidSpinCost||100);
     paidBtn.textContent=`🪙 Прокрут за ${Number(cfg?.paidSpinCost||100)} монет`;
   }
-  const freeLimit=Number(cfg?.freeSpinLimit||100);
-  const freeUsed=Number(me.freeUsed||0);
-  const freeLeft=Number(me.freeLeft??Math.max(0,freeLimit-freeUsed));
   if(me.freeAvailable){
     btn.disabled=spinning;
-    btn.textContent=spinning?'⏳ Колесо вращается…':'🎡 Бесплатный прокрут';
-    status.textContent=spinning?'Подожди, идёт вращение…':`Бесплатных прокрутов: ${freeLeft}/${freeLimit} за 24 часа`;
+    btn.textContent=spinning?'⏳ Колесо вращается…':'🎡 Крутить колесо';
+    const left=Number(me.freeLeft ?? (Number(cfg?.freeSpinLimit||100)-Number(me.freeUsed||0)));
+    status.textContent=spinning?'Подожди, идёт вращение…':`Бесплатных прокрутов осталось: ${left}`;
     return;
   }
   btn.disabled=true;
-  btn.textContent='⏱ Лимит бесплатных прокрутов';
+  btn.textContent='⏱ Следующий прокрут';
   const tick=()=>{
     const left=(me.freeNextAt||0)-Math.floor(Date.now()/1000);
     if(left<=0){loadMe();return;}
-    status.textContent='Следующий бесплатный прокрут через '+formatTime(left);
+    status.textContent='Лимит бесплатных прокрутов исчерпан. Следующий через '+formatTime(left);
   };
   tick(); cooldownTimer=setInterval(tick,1000);
 }
@@ -638,7 +784,7 @@ async function paidSpin(){
     const j=await api('/api/spin',{method:'POST',body:JSON.stringify({paid:true})});
     const result=j.result;
     const index=Math.max(0,wheelOrder.indexOf(result.id));
-    const center=index*45;
+    const center=index*36;
     const current=((wheelRotation%360)+360)%360;
     let delta=(360-center-current+360)%360;
     delta+=360*5;
@@ -674,7 +820,7 @@ async function spin(){
     const j=await api('/api/spin',{method:'POST',body:JSON.stringify({paid:false})});
     const result=j.result;
     const index=Math.max(0,wheelOrder.indexOf(result.id));
-    const center=index*45;
+    const center=index*36;
     const current=((wheelRotation%360)+360)%360;
     let delta=(360-center-current+360)%360;
     delta+=360*5;
@@ -684,9 +830,9 @@ async function spin(){
     setTimeout(()=>{
       me.user.coins=j.coins;
       me.freeUsed=Number(me.freeUsed||0)+1;
-      me.freeLeft=Math.max(0,Number(me.freeLeft??(cfg?.freeSpinLimit||100))-1);
+      me.freeLeft=Math.max(0,Number(me.freeLeft ?? Number(cfg?.freeSpinLimit||100))-1);
       me.freeAvailable=me.freeLeft>0;
-      if(!me.freeAvailable) me.freeNextAt=Math.floor(Date.now()/1000)+(cfg?.freeSpinHours||24)*3600;
+      if(!me.freeAvailable) me.freeNextAt=Math.floor(Date.now()/1000)+86400;
       document.getElementById('coins').textContent=j.coins;
       renderProfile();
       renderMyCodes();

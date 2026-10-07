@@ -17,6 +17,10 @@ services:
       - key: CHANNEL_URL
         sync: false
       - key: CHANNEL_ID
+      - key: SECOND_CHANNEL_USERNAME
+        value: '@elitemetrof'
+      - key: SECOND_CHANNEL_URL
+        value: 'https://t.me/elitemetrof'
         sync: false
       - key: WEBAPP_URL
         sync: false
