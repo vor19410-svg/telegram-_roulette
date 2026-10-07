@@ -16,6 +16,23 @@ const BOT_USERNAME = process.env.BOT_USERNAME || '';
 const CHANNEL_USERNAME = process.env.CHANNEL_USERNAME || '';
 const CHANNEL_ID = process.env.CHANNEL_ID || '';
 const CHANNEL_URL = process.env.CHANNEL_URL || '';
+
+// Telegram chat used for subscription checks. If CHANNEL_USERNAME is wrong
+// (for example a display title like "Elite Force"), derive the public
+// username from CHANNEL_URL instead of sending an invalid chat_id to Telegram.
+function effectiveChannelChatId(){
+  if(String(CHANNEL_ID).trim()) return String(CHANNEL_ID).trim();
+  const raw=String(CHANNEL_USERNAME).trim();
+  if(/^@?[A-Za-z0-9_]{5,32}$/.test(raw) && !/\s/.test(raw)){
+    return raw.startsWith('@') ? raw : '@'+raw;
+  }
+  try{
+    const u=new URL(CHANNEL_URL);
+    const m=u.pathname.match(/^\/([A-Za-z0-9_]{5,32})\/?$/);
+    if(m) return '@'+m[1];
+  }catch{}
+  return '';
+}
 const WEBAPP_URL = process.env.WEBAPP_URL || '';
 
 app.use(express.json({ limit: '256kb' }));
@@ -162,7 +179,7 @@ async function tg(method, body={}){
   return j.result;
 }
 async function isSubscribed(userId){
-  const chatId=CHANNEL_ID || CHANNEL_USERNAME;
+  const chatId=effectiveChannelChatId();
   if(!chatId) return false;
   try {
     const m=await tg('getChatMember',{chat_id:chatId,user_id:Number(userId)});
@@ -200,13 +217,13 @@ function requireAdmin(req,res){
   return x;
 }
 
-app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!(CHANNEL_ID||CHANNEL_USERNAME),webappConfigured:!!WEBAPP_URL}));
+app.get('/api/health',(req,res)=>res.json({ok:true,telegramConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!effectiveChannelChatId(),webappConfigured:!!WEBAPP_URL}));
 
 app.get('/api/telegram/diagnostics',async (req,res)=>{
-  const out={botTokenConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!(CHANNEL_ID||CHANNEL_USERNAME),webappConfigured:!!WEBAPP_URL,channelId:CHANNEL_ID||null,channelUsername:CHANNEL_USERNAME||null};
+  const out={botTokenConfigured:!!BOT_TOKEN,adminConfigured:!!ADMIN_ID,channelConfigured:!!effectiveChannelChatId(),webappConfigured:!!WEBAPP_URL,channelId:CHANNEL_ID||null,channelUsername:CHANNEL_USERNAME||null,effectiveChannelChatId:effectiveChannelChatId()||null};
   try{ const me=await tg('getMe'); out.bot={id:me.id,username:me.username,first_name:me.first_name}; }catch(e){ out.botError=e.message; }
   try{ const info=await tg('getWebhookInfo'); out.webhook={url:info.url||'',pending_update_count:info.pending_update_count||0,last_error_message:info.last_error_message||'',last_error_date:info.last_error_date||0}; }catch(e){ out.webhookError=e.message; }
-  const chatId=CHANNEL_ID||CHANNEL_USERNAME;
+  const chatId=effectiveChannelChatId();
   if(chatId){
     try{ const chat=await tg('getChat',{chat_id:chatId}); out.channel={id:chat.id,title:chat.title,username:chat.username||null,type:chat.type}; }catch(e){ out.channelError=e.message; }
   }
