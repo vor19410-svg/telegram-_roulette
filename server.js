@@ -115,14 +115,14 @@ const defaults = {
   second_channel_reward: '50',
   weight_c50a: '15',
   weight_c100a: '10',
-  weight_c150a: '7',
-  weight_c100b: '6',
+  weight_c150a: '5',
+  weight_c100b: '7',
   weight_c150b: '5',
-  weight_discount25: '3',
-  weight_uc60: '0.2',
-  weight_uc30: '0',
+  weight_discount25: '5',
+  weight_uc60: '1',
+  weight_uc30: '2',
   weight_butterfly: '0',
-  weight_nothing: '53.8',
+  weight_nothing: '35',
   uc_roulette_inventory: '1',
   discount_roulette_inventory: '-1',
   uc30_roulette_inventory: '0',
@@ -150,6 +150,39 @@ const defaults = {
 };
 const setDefault = db.prepare(`INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)`);
 for (const [k,v] of Object.entries(defaults)) setDefault.run(k,v);
+
+// One-time migration: apply the exact roulette layout/percentages requested by the admin.
+// A marker prevents later deployments from overwriting future admin changes.
+if (db.prepare("SELECT 1 FROM settings WHERE key='roulette_percentages_v3_applied'").get() === undefined) {
+  const rouletteV3 = {
+    weight_c150a:'5',
+    weight_c100a:'10',
+    weight_discount25:'5',
+    weight_uc30:'2',
+    weight_butterfly:'0',
+    weight_nothing:'35',
+    weight_uc60:'1',
+    weight_c100b:'7',
+    weight_c150b:'5',
+    weight_c50a:'15',
+    slot_c150a_kind:'coins', slot_c150a_value:'150',
+    slot_c100a_kind:'coins', slot_c100a_value:'100',
+    slot_discount25_kind:'discount', slot_discount25_value:'25',
+    slot_uc30_kind:'uc', slot_uc30_value:'30',
+    slot_butterfly_kind:'butterfly', slot_butterfly_value:'Нож-бабочка',
+    slot_nothing_kind:'nothing', slot_nothing_value:'0',
+    slot_uc60_kind:'uc', slot_uc60_value:'60',
+    slot_c100b_kind:'discount', slot_c100b_value:'10',
+    slot_c150b_kind:'discount', slot_c150b_value:'15',
+    slot_c50a_kind:'coins', slot_c50a_value:'50'
+  };
+  const applyRouletteV3 = db.prepare('UPDATE settings SET value=? WHERE key=?');
+  const applyRouletteV3Tx = db.transaction(() => {
+    for (const [k,v] of Object.entries(rouletteV3)) applyRouletteV3.run(String(v), k);
+    db.prepare("INSERT INTO settings(key,value) VALUES ('roulette_percentages_v3_applied','1')").run();
+  });
+  applyRouletteV3Tx();
+}
 
 db.prepare(`INSERT OR IGNORE INTO tasks(key,title,reward) VALUES ('channel','Подпишитесь на наш канал',50)`).run();
 
@@ -212,7 +245,10 @@ function pickResult(){
   const finalTotal=scale*100;
   let x=crypto.randomInt(finalTotal);
   for(let i=0;i<pool.length;i++){ x-=weights[i]; if(x<0) return pool[i]; }
-  return {id:'unassigned',label:'Без награды',kind:'nothing',value:0,weightKey:null,weight:100-total/scale};
+  // The configured percentages may intentionally total less than 100%.
+  // The remaining probability is a no-reward outcome and must point to the
+  // actual "Nothing" sector so the visual wheel and the result can never disagree.
+  return {id:'nothing',label:'Ничего',kind:'nothing',value:0,weightKey:'weight_nothing',weight:100-total/scale};
 }
 
 function authInitData(initData){
