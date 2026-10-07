@@ -258,8 +258,7 @@ app.post('/api/spin',(req,res)=>{
   const lastFree=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' ORDER BY created_at DESC LIMIT 1").get(u.id)?.created_at||0;
   if(!paid && now()-lastFree<setting('free_spin_hours')*3600) return res.status(400).json({error:'Бесплатный прокрут ещё недоступен',nextAt:lastFree+setting('free_spin_hours')*3600});
   const paidCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='paid' AND created_at>?").get(u.id,now()-86400).c;
-  // Paid spins are not limited by a 24h counter: each paid spin costs 100 🪙
-  // (the count is kept only for statistics/backward compatibility).
+  if(paid && paidCount>=setting('paid_spin_limit')) return res.status(400).json({error:'Лимит платных прокрутов за 24 часа исчерпан'});
   if(paid && u.coins<setting('paid_spin_cost')) return res.status(400).json({error:'Недостаточно монет'});
   const result=pickResult();
   const t=now();
