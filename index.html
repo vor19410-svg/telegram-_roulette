@@ -136,7 +136,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
         <button id="paidSpinButton" class="secondary" onclick="paidSpin()">🪙 Прокрут за 100 монет</button>
         <button class="secondary" onclick="show('tasks')">Перейти к заданиям</button>
       </div>
-      <div id="paidSpinStatus" class="small" style="margin-top:8px">Платных прокрутов: 0/5 за 24 часа</div>
+      <div id="paidSpinStatus" class="small" style="margin-top:8px">Платные прокруты: без лимита · 100 🪙 за прокрут</div>
       <div id="resultBox" class="result hidden"><span>Результат</span><b id="resultText">—</b></div>
     </div>
   </section>
@@ -600,13 +600,10 @@ function updateSpinState(){
   if(!btn||!status||!me) return;
   clearInterval(cooldownTimer);
   if(paidStatus){
-    const limit=Number(cfg?.paidSpinLimit||5);
-    const used=Number(me.paidUsed||0);
-    paidStatus.textContent=`Платных прокрутов: ${used}/${limit} за 24 часа · 100 🪙 за прокрут`;
+    paidStatus.textContent=`Платные прокруты: без лимита · ${Number(cfg?.paidSpinCost||100)} 🪙 за прокрут`;
   }
   if(paidBtn){
-    const limit=Number(cfg?.paidSpinLimit||5);
-    paidBtn.disabled=spinning || Number(me.paidLeft||0)<=0 || Number(me.user?.coins||0)<Number(cfg?.paidSpinCost||100);
+    paidBtn.disabled=spinning || Number(me.user?.coins||0)<Number(cfg?.paidSpinCost||100);
     paidBtn.textContent=`🪙 Прокрут за ${Number(cfg?.paidSpinCost||100)} монет`;
   }
   if(me.freeAvailable){
