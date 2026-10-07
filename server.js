@@ -100,8 +100,16 @@ const defaults = {
   code_days: '10',
   exchange_coins: '3500',
   exchange_uc: '60',
+  exchange_uc_enabled: '1',
+  exchange_uc30_coins: '1800',
+  exchange_uc30_enabled: '1',
   exchange_discount_coins: '800',
   exchange_discount_percent: '25',
+  exchange_discount25_enabled: '1',
+  exchange_discount10_coins: '500',
+  exchange_discount15_coins: '1000',
+  exchange_discount10_enabled: '1',
+  exchange_discount15_enabled: '1',
   referral_reward: '100',
   channel_reward: '50',
   second_channel_reward: '50',
@@ -289,7 +297,7 @@ app.get('/api/telegram/diagnostics',async (req,res)=>{
 
 app.get('/api/config',(req,res)=>{
   const roulette=rouletteSlots.map(slot=>{ const r=slotResult(slot); return {id:slot.id,label:r.label,kind:r.displayKind||r.kind,value:r.value,inventoryKey:r.inventoryKey}; });
-  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,secondChannelUrl:SECOND_CHANNEL_URL,secondChannelUsername:SECOND_CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),freeSpinLimit:100,paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),secondChannelReward:setting('second_channel_reward'),rewardInventory:{discount25:setting('discount_roulette_inventory'),uc60:setting('uc_roulette_inventory'),uc30:setting('uc30_roulette_inventory'),butterfly:setting('butterfly_roulette_inventory')},roulette});
+  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,secondChannelUrl:SECOND_CHANNEL_URL,secondChannelUsername:SECOND_CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeUcEnabled:setting('exchange_uc_enabled')===1,exchangeDiscount25Enabled:setting('exchange_discount25_enabled')===1,exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),exchangeDiscount10Coins:setting('exchange_discount10_coins'),exchangeDiscount15Coins:setting('exchange_discount15_coins'),exchangeDiscount10Enabled:setting('exchange_discount10_enabled')===1,exchangeDiscount15Enabled:setting('exchange_discount15_enabled')===1,exchangeUc30Coins:setting('exchange_uc30_coins'),exchangeUc30Enabled:setting('exchange_uc30_enabled')===1,freeSpinHours:setting('free_spin_hours'),freeSpinLimit:100,paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),secondChannelReward:setting('second_channel_reward'),rewardInventory:{discount25:setting('discount_roulette_inventory'),uc60:setting('uc_roulette_inventory'),uc30:setting('uc30_roulette_inventory'),butterfly:setting('butterfly_roulette_inventory')},roulette});
 });
 
 app.get('/api/me',(req,res)=>{
@@ -388,13 +396,31 @@ app.post('/api/exchange', (req,res)=>{
   const type=String(req.body?.type||'uc60');
   let cost, rewardType, rewardValue, prefix, label;
   if(type==='discount25' || type==='discount'){
+    if(setting('exchange_discount25_enabled')!==1) return res.status(400).json({error:'Скидка 25% сейчас отключена'});
     cost=setting('exchange_discount_coins');
     const percent=setting('exchange_discount_percent');
     rewardType='exchange_discount25';
     rewardValue=`Скидка ${percent}% на экипировку`;
     prefix='SALE';
     label=`Скидка ${percent}% на экипировку`;
+  } else if(type==='discount10' || type==='discount15'){
+    const percent=type==='discount10'?10:15;
+    const enabled=setting(type==='discount10'?'exchange_discount10_enabled':'exchange_discount15_enabled');
+    if(enabled!==1) return res.status(400).json({error:`Скидка ${percent}% сейчас отключена`});
+    cost=setting(type==='discount10'?'exchange_discount10_coins':'exchange_discount15_coins');
+    rewardType=`exchange_discount${percent}`;
+    rewardValue=`Скидка ${percent}% на экипировку`;
+    prefix=`SALE${percent}`;
+    label=`Скидка ${percent}% на экипировку`;
+  } else if(type==='uc30'){
+    if(setting('exchange_uc30_enabled')!==1) return res.status(400).json({error:'30 UC сейчас отключены'});
+    cost=setting('exchange_uc30_coins');
+    rewardType='exchange_uc30';
+    rewardValue='30 UC';
+    prefix='UC30';
+    label='30 UC';
   } else if(type==='uc60' || type==='uc'){
+    if(setting('exchange_uc_enabled')!==1) return res.status(400).json({error:'60 UC сейчас отключены'});
     cost=setting('exchange_coins');
     const uc=setting('exchange_uc');
     rewardType='exchange_uc';
@@ -487,7 +513,7 @@ app.post('/api/admin/gift-150',async (req,res)=>{
 });
 app.post('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
-  const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_uc30','weight_butterfly','weight_nothing','uc_roulette_inventory','discount_roulette_inventory','uc30_roulette_inventory','butterfly_roulette_inventory',
+  const allowed=['exchange_coins','exchange_uc','exchange_uc_enabled','exchange_uc30_coins','exchange_uc30_enabled','exchange_discount_coins','exchange_discount25_enabled','exchange_discount_percent','exchange_discount10_coins','exchange_discount15_coins','exchange_discount10_enabled','exchange_discount15_enabled','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_uc30','weight_butterfly','weight_nothing','uc_roulette_inventory','discount_roulette_inventory','uc30_roulette_inventory','butterfly_roulette_inventory',
     ...rouletteSlots.flatMap(s=>[`slot_${s.id}_kind`,`slot_${s.id}_value`])];
   const update=db.prepare('UPDATE settings SET value=? WHERE key=?');
   const weightKeys=['weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_uc30','weight_butterfly','weight_nothing'];
@@ -518,7 +544,8 @@ app.post('/api/admin/settings',(req,res)=>{
     if(!Number.isFinite(n)) return res.status(400).json({error:`Некорректное значение: ${k}`});
     if(['uc_roulette_inventory','uc30_roulette_inventory','butterfly_roulette_inventory'].includes(k) && n<0) return res.status(400).json({error:`Количество ${k} не может быть отрицательным`});
     if(k==='discount_roulette_inventory' && n<-1) return res.status(400).json({error:'Количество скидок: -1 или 0 и больше'});
-    if(['exchange_discount_coins','exchange_coins','exchange_uc','code_days'].includes(k) && n<1) return res.status(400).json({error:`Значение ${k} должно быть больше 0`});
+    if(['exchange_discount_coins','exchange_discount25_enabled','exchange_uc30_coins','exchange_discount10_coins','exchange_discount15_coins','exchange_coins','exchange_uc','code_days'].includes(k) && n<1) return res.status(400).json({error:`Значение ${k} должно быть больше 0`});
+    if(['exchange_uc_enabled','exchange_discount25_enabled','exchange_uc30_enabled','exchange_discount10_enabled','exchange_discount15_enabled',].includes(k) && ![0,1].includes(n)) return res.status(400).json({error:`Флаг ${k} должен быть 0 или 1`});
     if(k==='exchange_discount_percent' && (n<1 || n>100)) return res.status(400).json({error:'Процент скидки должен быть от 1 до 100'});
     if(k==='code_days' && n>365) return res.status(400).json({error:'Срок кода не может быть больше 365 дней'});
     update.run(String(req.body[k]),k);

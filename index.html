@@ -172,15 +172,30 @@ button:disabled{opacity:.45;cursor:not-allowed}
     <div class="item">
       <div class="row"><span>💰 Твой баланс</span><b id="exchangeCoins">0 🪙</b></div>
     </div>
-    <div class="item">
+    <div id="exchangeDiscountItem" class="item">
       <div class="row"><b>🏷️ Скидка <span id="exchangeDiscountPercent">25</span>%</b><span id="exchangeDiscountCost">800 🪙</span></div>
       <div class="small" style="margin-top:5px">После обмена ты получишь код скидки. Код действует 10 дней с момента получения.</div>
       <button id="exchangeDiscountBtn" class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('discount',Number(cfg?.exchangeDiscountCoins||800))">Обменять за 800 🪙</button>
     </div>
-    <div class="item">
+    <div id="exchangeUcItem" class="item">
       <div class="row"><b>🎮 <span id="exchangeUcAmount">60</span> UC</b><span id="exchangeUcCost">3500 🪙</span></div>
       <div class="small" style="margin-top:5px">После обмена ты получишь код на 60 UC. Код действует 10 дней с момента получения.</div>
       <button id="exchangeUcBtn" class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('uc60',Number(cfg?.exchangeCoins||3500))">Обменять за 3500 🪙</button>
+    </div>
+    <div id="exchangeUc30Item" class="item hidden">
+      <div class="row"><b>🎮 30 UC</b><span id="exchangeUc30Cost">1800 🪙</span></div>
+      <div class="small" style="margin-top:5px">После обмена ты получишь код на 30 UC. Код действует 10 дней с момента получения.</div>
+      <button id="exchangeUc30Btn" class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('uc30',Number(cfg?.exchangeUc30Coins||1800))">Обменять за 1800 🪙</button>
+    </div>
+    <div id="exchangeDiscount10Item" class="item hidden">
+      <div class="row"><b>🏷️ Скидка 10%</b><span id="exchangeDiscount10Cost">500 🪙</span></div>
+      <div class="small" style="margin-top:5px">После обмена ты получишь код скидки. Код действует 10 дней с момента получения.</div>
+      <button id="exchangeDiscount10Btn" class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('discount10',Number(cfg?.exchangeDiscount10Coins||500))">Обменять за 500 🪙</button>
+    </div>
+    <div id="exchangeDiscount15Item" class="item hidden">
+      <div class="row"><b>🏷️ Скидка 15%</b><span id="exchangeDiscount15Cost">1000 🪙</span></div>
+      <div class="small" style="margin-top:5px">После обмена ты получишь код скидки. Код действует 10 дней с момента получения.</div>
+      <button id="exchangeDiscount15Btn" class="primary" style="width:100%;margin-top:9px" onclick="exchangeReward('discount15',Number(cfg?.exchangeDiscount15Coins||1000))">Обменять за 1000 🪙</button>
     </div>
     <button class="secondary" style="width:100%;margin-top:9px" onclick="show('profile')">← Назад в профиль</button>
   </section>
@@ -249,10 +264,18 @@ button:disabled{opacity:.45;cursor:not-allowed}
     <div class="item">
       <b>🎁 Настройки обмена</b>
       <div class="grid" style="margin-top:10px">
-        <label>🏷️ Скидка: монет<input id="setDiscountCoins" type="number" min="1"></label>
+        <label>🏷️ Скидка 25%: монет<input id="setDiscountCoins" type="number" min="1"></label>
+        <label>🏷️ Скидка 25%: включить<select id="setDiscount25Enabled"><option value="1">Включена</option><option value="0">Отключена</option></select></label>
         <label>🏷️ Процент скидки<input id="setDiscountPercent" type="number" min="1" max="100"></label>
-        <label>🎮 UC: монет<input id="setUcCoins" type="number" min="1"></label>
+        <label>🏷️ Скидка 10%: монет<input id="setDiscount10Coins" type="number" min="1"></label>
+        <label>🏷️ Скидка 10%: включить<select id="setDiscount10Enabled"><option value="1">Включена</option><option value="0">Отключена</option></select></label>
+        <label>🏷️ Скидка 15%: монет<input id="setDiscount15Coins" type="number" min="1"></label>
+        <label>🏷️ Скидка 15%: включить<select id="setDiscount15Enabled"><option value="1">Включена</option><option value="0">Отключена</option></select></label>
+        <label>🎮 60 UC: монет<input id="setUcCoins" type="number" min="1"></label>
+        <label>🎮 60 UC: включить<select id="setUcEnabled"><option value="1">Включены</option><option value="0">Отключены</option></select></label>
         <label>🎮 Количество UC<input id="setUcAmount" type="number" min="1"></label>
+        <label>🎮 30 UC: монет<input id="setUc30Coins" type="number" min="1"></label>
+        <label>🎮 30 UC: включить<select id="setUc30Enabled"><option value="1">Включены</option><option value="0">Отключены</option></select></label>
         <label>⏳ Код действует, дней<input id="setCodeDays" type="number" min="1" max="365"></label>
       </div>
       <button class="primary" style="width:100%;margin-top:10px" onclick="saveAdminSettings()">💾 Сохранить настройки</button>
@@ -460,8 +483,16 @@ async function loadAdmin(){
       api('/api/admin/users')
     ]);
     document.getElementById('setDiscountCoins').value=settings.exchange_discount_coins??800;
+    document.getElementById('setDiscount25Enabled').value=String(settings.exchange_discount25_enabled??1);
     document.getElementById('setDiscountPercent').value=settings.exchange_discount_percent??25;
+    document.getElementById('setUc30Coins').value=settings.exchange_uc30_coins??1800;
+    document.getElementById('setUc30Enabled').value=String(settings.exchange_uc30_enabled??1);
+    document.getElementById('setDiscount10Coins').value=settings.exchange_discount10_coins??500;
+    document.getElementById('setDiscount10Enabled').value=String(settings.exchange_discount10_enabled??1);
+    document.getElementById('setDiscount15Coins').value=settings.exchange_discount15_coins??1000;
+    document.getElementById('setDiscount15Enabled').value=String(settings.exchange_discount15_enabled??1);
     document.getElementById('setUcCoins').value=settings.exchange_coins??3500;
+    document.getElementById('setUcEnabled').value=String(settings.exchange_uc_enabled??1);
     document.getElementById('setUcAmount').value=settings.exchange_uc??60;
     document.getElementById('setCodeDays').value=settings.code_days??10;
     document.getElementById('stats').innerHTML=`
@@ -534,8 +565,16 @@ async function loadRewardSettings(){
     const settings=await api('/api/admin/settings');
     renderRouletteSlotSettings(settings);
     document.getElementById('setDiscountCoins').value=settings.exchange_discount_coins??800;
+    document.getElementById('setDiscount25Enabled').value=String(settings.exchange_discount25_enabled??1);
     document.getElementById('setDiscountPercent').value=settings.exchange_discount_percent??25;
+    document.getElementById('setUc30Coins').value=settings.exchange_uc30_coins??1800;
+    document.getElementById('setUc30Enabled').value=String(settings.exchange_uc30_enabled??1);
+    document.getElementById('setDiscount10Coins').value=settings.exchange_discount10_coins??500;
+    document.getElementById('setDiscount10Enabled').value=String(settings.exchange_discount10_enabled??1);
+    document.getElementById('setDiscount15Coins').value=settings.exchange_discount15_coins??1000;
+    document.getElementById('setDiscount15Enabled').value=String(settings.exchange_discount15_enabled??1);
     document.getElementById('setUcCoins').value=settings.exchange_coins??3500;
+    document.getElementById('setUcEnabled').value=String(settings.exchange_uc_enabled??1);
     document.getElementById('setUcAmount').value=settings.exchange_uc??60;
     document.getElementById('setCodeDays').value=settings.code_days??10;
     document.getElementById('setInventoryDiscount25').value=settings.discount_roulette_inventory??-1;
@@ -551,9 +590,17 @@ async function saveAdminSettings(){
     const slotPayload=getRouletteSlotPayload();
     const payload={
       exchange_discount_coins:Number(document.getElementById('setDiscountCoins').value),
+      exchange_discount25_enabled:Number(document.getElementById('setDiscount25Enabled').value),
       exchange_discount_percent:Number(document.getElementById('setDiscountPercent').value),
+      exchange_discount10_coins:Number(document.getElementById('setDiscount10Coins').value),
+      exchange_discount10_enabled:Number(document.getElementById('setDiscount10Enabled').value),
+      exchange_discount15_coins:Number(document.getElementById('setDiscount15Coins').value),
+      exchange_discount15_enabled:Number(document.getElementById('setDiscount15Enabled').value),
       exchange_coins:Number(document.getElementById('setUcCoins').value),
+      exchange_uc_enabled:Number(document.getElementById('setUcEnabled').value),
       exchange_uc:Number(document.getElementById('setUcAmount').value),
+      exchange_uc30_coins:Number(document.getElementById('setUc30Coins').value),
+      exchange_uc30_enabled:Number(document.getElementById('setUc30Enabled').value),
       code_days:Number(document.getElementById('setCodeDays').value),
       uc_roulette_inventory:Number(document.getElementById('setInventoryUc60').value),
       discount_roulette_inventory:Number(document.getElementById('setInventoryDiscount25').value),
@@ -640,14 +687,29 @@ async function refreshExchangeBalance(){
   if(el) el.textContent=(me?.user?.coins??0)+' 🪙';
   const dc=Number(cfg?.exchangeDiscountCoins||800), dp=Number(cfg?.exchangeDiscountPercent||25);
   const uc=Number(cfg?.exchangeUc||60), ucCost=Number(cfg?.exchangeCoins||3500);
+  const uc30Cost=Number(cfg?.exchangeUc30Coins||1800), d10=Number(cfg?.exchangeDiscount10Coins||500), d15=Number(cfg?.exchangeDiscount15Coins||1000);
   document.getElementById('exchangeDiscountPercent')?.replaceChildren(String(dp));
   document.getElementById('exchangeDiscountCost')?.replaceChildren(`${dc} 🪙`);
   document.getElementById('exchangeUcAmount')?.replaceChildren(String(uc));
   document.getElementById('exchangeUcCost')?.replaceChildren(`${ucCost} 🪙`);
+  document.getElementById('exchangeUc30Cost')?.replaceChildren(`${uc30Cost} 🪙`);
+  document.getElementById('exchangeDiscount10Cost')?.replaceChildren(`${d10} 🪙`);
+  document.getElementById('exchangeDiscount15Cost')?.replaceChildren(`${d15} 🪙`);
   const db=document.getElementById('exchangeDiscountBtn');
   const ub=document.getElementById('exchangeUcBtn');
+  const u30b=document.getElementById('exchangeUc30Btn');
+  const d10b=document.getElementById('exchangeDiscount10Btn');
+  const d15b=document.getElementById('exchangeDiscount15Btn');
   if(db) db.textContent=`Обменять за ${dc} 🪙`;
   if(ub) ub.textContent=`Обменять за ${ucCost} 🪙`;
+  if(u30b) u30b.textContent=`Обменять за ${uc30Cost} 🪙`;
+  if(d10b) d10b.textContent=`Обменять за ${d10} 🪙`;
+  if(d15b) d15b.textContent=`Обменять за ${d15} 🪙`;
+  document.getElementById('exchangeDiscountItem')?.classList.toggle('hidden',cfg?.exchangeDiscount25Enabled!==true);
+  document.getElementById('exchangeUcItem')?.classList.toggle('hidden',cfg?.exchangeUcEnabled!==true);
+  document.getElementById('exchangeUc30Item')?.classList.toggle('hidden',cfg?.exchangeUc30Enabled!==true);
+  document.getElementById('exchangeDiscount10Item')?.classList.toggle('hidden',cfg?.exchangeDiscount10Enabled!==true);
+  document.getElementById('exchangeDiscount15Item')?.classList.toggle('hidden',cfg?.exchangeDiscount15Enabled!==true);
 }
 async function exchangeReward(type,cost){
   if((me?.user?.coins??0)<cost){toast(`Нужно ${cost} монет`);return}
