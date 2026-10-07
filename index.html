@@ -55,7 +55,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
   border:7px solid #b98318;box-shadow:0 0 0 3px #f5d46b55,0 0 30px #7c27de66,inset 0 0 25px #000;
 }
 .wheel:before{content:"";position:absolute;inset:15px;border-radius:50%;border:1px solid #f6d56a66}
-.segment{position:absolute;left:50%;top:50%;width:72px;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;text-align:center;color:#fff;line-height:1.05;text-shadow:0 2px 4px #000;transform:translate(-50%,-50%);z-index:2}
+.segment{position:absolute;left:50%;top:50%;width:72px;min-height:34px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:900;text-align:center;color:#fff;line-height:1.05;text-shadow:0 2px 4px #000;transform:translate(-50%,-50%) rotate(var(--label-rotation, 0deg));z-index:2}
 .s1{left:50%;top:21%}.s2{left:73%;top:29%}.s3{left:79%;top:50%}.s4{left:72%;top:72%}
 .s5{left:50%;top:80%}.s6{left:28%;top:72%}.s7{left:21%;top:50%}.s8{left:28%;top:29%}
 .pointer{position:absolute;z-index:4;top:-3px;left:50%;transform:translateX(-50%);width:0;height:0;border-left:15px solid transparent;border-right:15px solid transparent;border-top:30px solid var(--gold);filter:drop-shadow(0 2px 3px #000)}
@@ -579,6 +579,11 @@ function copyRef(){
 
 const wheelOrder=['c150a','c100a','discount25','c50a','nothing','uc60','c100b','c150b'];
 let wheelRotation=0;
+function syncWheelLabels(){
+  const wheel=document.querySelector('.wheel');
+  if(wheel) wheel.style.setProperty('--label-rotation', `${-wheelRotation}deg`);
+}
+
 let spinning=false;
 let cooldownTimer=null;
 
@@ -636,6 +641,7 @@ async function paidSpin(){
     delta+=360*5;
     wheelRotation+=delta;
     document.querySelector('.wheel').style.transform=`rotate(${wheelRotation}deg)`;
+    syncWheelLabels();
     setTimeout(()=>{
       me.user.coins=j.coins;
       me.paidUsed=Number(me.paidUsed||0)+1;
@@ -671,6 +677,7 @@ async function spin(){
     delta+=360*5;
     wheelRotation+=delta;
     document.querySelector('.wheel').style.transform=`rotate(${wheelRotation}deg)`;
+    syncWheelLabels();
     setTimeout(()=>{
       me.user.coins=j.coins;
       me.freeAvailable=false;
