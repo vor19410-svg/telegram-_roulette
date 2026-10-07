@@ -121,16 +121,16 @@ button:disabled{opacity:.45;cursor:not-allowed}
       <div class="wheelWrap">
         <div class="pointer"></div>
         <div class="wheel">
-          <div class="segment s1">150<br>🪙</div>
-          <div class="segment s2">100<br>🪙</div>
-          <div class="segment s3">СКИДКА<br>25%<span class="stock" data-stock="discount25"></span></div>
-          <div class="segment s4">30<br>UC<span class="stock" data-stock="uc30"></span></div>
-          <div class="segment s5">НОЖ-БАБОЧКА<span class="stock" data-stock="butterfly"></span></div>
-          <div class="segment s6">НИЧЕГО</div>
-          <div class="segment s7">60<br>UC<span class="stock" data-stock="uc60"></span></div>
-          <div class="segment s8">100<br>🪙</div>
-          <div class="segment s9">150<br>🪙</div>
-          <div class="segment s10">50<br>🪙</div>
+          <div class="segment s1" data-slot="c150a"></div>
+          <div class="segment s2" data-slot="c100a"></div>
+          <div class="segment s3" data-slot="discount25"></div>
+          <div class="segment s4" data-slot="uc30"></div>
+          <div class="segment s5" data-slot="butterfly"></div>
+          <div class="segment s6" data-slot="nothing"></div>
+          <div class="segment s7" data-slot="uc60"></div>
+          <div class="segment s8" data-slot="c100b"></div>
+          <div class="segment s9" data-slot="c150b"></div>
+          <div class="segment s10" data-slot="c50a"></div>
         </div>
         <div class="center">VIEW</div>
       </div>
@@ -231,18 +231,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
     </div>
     <div class="item">
       <div class="small" style="margin-bottom:10px">Здесь настраивается шанс выпадения каждого результата рулетки. Значения указываются в процентах.</div>
-      <div class="grid">
-        <label>🪙 50 монет, %<input id="setWeightC50a" type="number" min="0" max="100" step="0.1"></label>
-        <label>🪙 100 монет, %<input id="setWeightC100a" type="number" min="0" max="100" step="0.1"></label>
-        <label>🪙 150 монет, %<input id="setWeightC150a" type="number" min="0" max="100" step="0.1"></label>
-        <label>🪙 100 монет, % (2)<input id="setWeightC100b" type="number" min="0" max="100" step="0.1"></label>
-        <label>🪙 150 монет, % (2)<input id="setWeightC150b" type="number" min="0" max="100" step="0.1"></label>
-        <label>🏷️ Скидка 25%, %<input id="setWeightDiscount25" type="number" min="0" max="100" step="0.1"></label>
-        <label>🎮 60 UC, %<input id="setWeightUc60" type="number" min="0" max="100" step="0.1"></label>
-        <label>🎮 30 UC, %<input id="setWeightUc30" type="number" min="0" max="100" step="0.1"></label>
-        <label>🔪 Нож-бабочка, %<input id="setWeightButterfly" type="number" min="0" max="100" step="0.1"></label>
-        <label>😕 Ничего, %<input id="setWeightNothing" type="number" min="0" max="100" step="0.1"></label>
-      </div>
+      <div class="small" style="margin-bottom:8px">Каждый слот рулетки можно переназначить. Например, слот «150 монет» можно переключить на «Скидка 15%». Шанс этого слота при этом останется тем же, пока ты его не изменишь.</div>
+      <div id="rouletteSlotSettings"></div>
       <div id="weightTotal" class="small" style="margin-top:10px">Всего задано: —%</div><div class="small">Сумма может быть меньше 100%. Каждый указанный процент остаётся именно своим шансом; остаток — отдельный исход без награды. Сумма больше 100% запрещена.</div>
     </div>
     <div class="item">
@@ -288,12 +278,31 @@ let me=null,cfg=null;
 // Load public configuration independently of Telegram authentication so the
 // channel button can always work even if the user session needs re-auth.
 async function loadPublicConfig(){
-  try{ cfg=await (await fetch('/api/config',{cache:'no-store'})).json(); if(cfg) cfg.freeSpinHours=Number(cfg.freeSpinHours||24); renderRewardStocks?.(); }catch(e){ cfg=cfg||{}; }
+  try{ cfg=await (await fetch('/api/config',{cache:'no-store'})).json(); if(cfg) cfg.freeSpinHours=Number(cfg.freeSpinHours||24); renderRewardStocks?.(); renderDynamicWheel?.(); }catch(e){ cfg=cfg||{}; }
 }
 loadPublicConfig();
 function formatRewardStock(v){ const n=Number(v); return n<0?'∞ шт.':`${Math.max(0,Math.floor(n))} шт.`; }
 function renderRewardStocks(){ document.querySelectorAll('[data-stock]').forEach(el=>{ const k=el.dataset.stock; el.textContent=formatRewardStock(cfg?.rewardInventory?.[k] ?? 0); }); }
 setTimeout(renderRewardStocks,0);
+function renderDynamicWheel(){
+  const map=Object.fromEntries((cfg?.roulette||[]).map(x=>[x.id,x]));
+  document.querySelectorAll('.wheel [data-slot]').forEach(el=>{
+    const r=map[el.dataset.slot]; if(!r)return;
+    let text='';
+    if(r.kind==='coins') text=`${r.value}<br>🪙`;
+    else if(r.kind==='discount') text=`СКИДКА<br>${String(r.value).replace('% скидка','%')}`;
+    else if(r.kind==='uc') text=`${r.value}<br>UC`;
+    else if(r.kind==='butterfly') text='НОЖ-БАБОЧКА';
+    else text='НИЧЕГО';
+    el.innerHTML=text;
+    if(r.inventoryKey){
+      const stockKey=r.inventoryKey==='discount_roulette_inventory'?'discount25':r.inventoryKey==='uc_roulette_inventory'?'uc60':r.inventoryKey==='uc30_roulette_inventory'?'uc30':r.inventoryKey==='butterfly_roulette_inventory'?'butterfly':null;
+      const stock=stockKey?cfg?.rewardInventory?.[stockKey]:null;
+      if(stock!==null) el.insertAdjacentHTML('beforeend',`<span class="stock">${formatRewardStock(stock)}</span>`);
+    }
+  });
+}
+
 
 async function api(path,opts={}){
   opts.headers={...(opts.headers||{}),'Content-Type':'application/json','X-Telegram-Init-Data':initData};
@@ -473,35 +482,24 @@ async function loadAdmin(){
 }
 
 function updateWeightTotal(){
-  const ids=['setWeightC50a','setWeightC100a','setWeightC150a','setWeightC100b','setWeightC150b','setWeightDiscount25','setWeightUc60','setWeightUc30','setWeightButterfly','setWeightNothing'];
-  const total=ids.reduce((sum,id)=>sum+(Number(document.getElementById(id)?.value)||0),0);
+  const total=rouletteSlotMeta.reduce((sum,[id])=>sum+(Number(document.getElementById(`slotWeight_${id}`)?.value)||0),0);
   const el=document.getElementById('weightTotal');
-  if(el) el.textContent=`Всего задано: ${total.toFixed(1)}% ${total<=100.000001?'✅ Остаток автоматически — «Ничего»':'⚠️ Сумма не может быть больше 100%'}`;
+  if(el) el.textContent=`Всего задано: ${total.toFixed(1)}% ${total<=100.000001?'✅':'⚠️ Сумма не может быть больше 100%'}`;
 }
 function bindWeightInputs(){
-  ['setWeightC50a','setWeightC100a','setWeightC150a','setWeightC100b','setWeightC150b','setWeightDiscount25','setWeightUc60','setWeightUc30','setWeightButterfly','setWeightNothing'].forEach(id=>{
-    document.getElementById(id)?.addEventListener('input',updateWeightTotal);
-  });
+  rouletteSlotMeta.forEach(([id])=>document.getElementById(`slotWeight_${id}`)?.addEventListener('input',updateWeightTotal));
 }
+
 async function loadRewardSettings(){
   if(!me?.admin){ show('profile'); toast('Доступ только для администратора'); return; }
   try{
     const settings=await api('/api/admin/settings');
+    renderRouletteSlotSettings(settings);
     document.getElementById('setDiscountCoins').value=settings.exchange_discount_coins??800;
     document.getElementById('setDiscountPercent').value=settings.exchange_discount_percent??25;
     document.getElementById('setUcCoins').value=settings.exchange_coins??3500;
     document.getElementById('setUcAmount').value=settings.exchange_uc??60;
     document.getElementById('setCodeDays').value=settings.code_days??10;
-    document.getElementById('setWeightC50a').value=settings.weight_c50a??15;
-    document.getElementById('setWeightC100a').value=settings.weight_c100a??10;
-    document.getElementById('setWeightC150a').value=settings.weight_c150a??7;
-    document.getElementById('setWeightC100b').value=settings.weight_c100b??6;
-    document.getElementById('setWeightC150b').value=settings.weight_c150b??5;
-    document.getElementById('setWeightDiscount25').value=settings.weight_discount25??3;
-    document.getElementById('setWeightUc60').value=settings.weight_uc60??0.2;
-    document.getElementById('setWeightUc30').value=settings.weight_uc30??0;
-    document.getElementById('setWeightButterfly').value=settings.weight_butterfly??0;
-    document.getElementById('setWeightNothing').value=settings.weight_nothing??53.8;
     document.getElementById('setInventoryDiscount25').value=settings.discount_roulette_inventory??-1;
     document.getElementById('setInventoryUc60').value=settings.uc_roulette_inventory??1;
     document.getElementById('setInventoryUc30').value=settings.uc30_roulette_inventory??0;
@@ -512,64 +510,33 @@ async function loadRewardSettings(){
 
 async function saveAdminSettings(){
   try{
+    const slotPayload=getRouletteSlotPayload();
     const payload={
       exchange_discount_coins:Number(document.getElementById('setDiscountCoins').value),
       exchange_discount_percent:Number(document.getElementById('setDiscountPercent').value),
       exchange_coins:Number(document.getElementById('setUcCoins').value),
       exchange_uc:Number(document.getElementById('setUcAmount').value),
       code_days:Number(document.getElementById('setCodeDays').value),
-      weight_c50a:Number(document.getElementById('setWeightC50a').value),
-      weight_c100a:Number(document.getElementById('setWeightC100a').value),
-      weight_c150a:Number(document.getElementById('setWeightC150a').value),
-      weight_c100b:Number(document.getElementById('setWeightC100b').value),
-      weight_c150b:Number(document.getElementById('setWeightC150b').value),
-      weight_discount25:Number(document.getElementById('setWeightDiscount25').value),
-      weight_uc60:Number(document.getElementById('setWeightUc60').value),
-      weight_uc30:Number(document.getElementById('setWeightUc30').value),
-      weight_butterfly:Number(document.getElementById('setWeightButterfly').value),
-      weight_nothing:Number(document.getElementById('setWeightNothing').value),
       uc_roulette_inventory:Number(document.getElementById('setInventoryUc60').value),
       discount_roulette_inventory:Number(document.getElementById('setInventoryDiscount25').value),
       uc30_roulette_inventory:Number(document.getElementById('setInventoryUc30').value),
-      butterfly_roulette_inventory:Number(document.getElementById('setInventoryButterfly').value)
+      butterfly_roulette_inventory:Number(document.getElementById('setInventoryButterfly').value),
+      ...slotPayload
     };
-    if(!payload.exchange_discount_coins||!payload.exchange_coins||!payload.exchange_uc||!payload.code_days){toast('Заполни все поля');return}
-    if(payload.exchange_discount_percent<1||payload.exchange_discount_percent>100){toast('Скидка должна быть от 1 до 100%');return}
-    if(payload.code_days<1||payload.code_days>365){toast('Срок кода: от 1 до 365 дней');return}
-    const odds=[payload.weight_c50a,payload.weight_c100a,payload.weight_c150a,payload.weight_c100b,payload.weight_c150b,payload.weight_discount25,payload.weight_uc60,payload.weight_uc30,payload.weight_butterfly,payload.weight_nothing];
+    const odds=rouletteSlotMeta.map(([id])=>payload[`weight_${id}`]);
     if(odds.some(x=>x<0||x>100||!Number.isFinite(x))){toast('Шансы должны быть от 0 до 100%');return}
     const total=odds.reduce((a,b)=>a+b,0);
     if(total>100.000001){toast(`Сумма шансов не может быть больше 100%. Сейчас ${total.toFixed(1)}%`);return}
+    if(payload.exchange_discount_percent<1||payload.exchange_discount_percent>100){toast('Скидка должна быть от 1 до 100%');return}
+    if(payload.code_days<1||payload.code_days>365){toast('Срок кода: от 1 до 365 дней');return}
     const saved=await api('/api/admin/settings',{method:'POST',body:JSON.stringify(payload)});
     const settings=saved?.settings||payload;
-    cfg=cfg||{}; cfg.rewardInventory={discount25:Number(settings.discount_roulette_inventory??payload.discount_roulette_inventory),uc60:Number(settings.uc_roulette_inventory??payload.uc_roulette_inventory),uc30:Number(settings.uc30_roulette_inventory??payload.uc30_roulette_inventory),butterfly:Number(settings.butterfly_roulette_inventory??payload.butterfly_roulette_inventory)}; renderRewardStocks();
-    const ids={
-      exchange_discount_coins:'setDiscountCoins',
-      exchange_discount_percent:'setDiscountPercent',
-      exchange_coins:'setUcCoins',
-      exchange_uc:'setUcAmount',
-      code_days:'setCodeDays',
-      weight_c50a:'setWeightC50a',
-      weight_c100a:'setWeightC100a',
-      weight_c150a:'setWeightC150a',
-      weight_c100b:'setWeightC100b',
-      weight_c150b:'setWeightC150b',
-      weight_discount25:'setWeightDiscount25',
-      weight_uc60:'setWeightUc60',
-      weight_uc30:'setWeightUc30',
-      weight_butterfly:'setWeightButterfly',
-      weight_nothing:'setWeightNothing',
-      uc_roulette_inventory:'setInventoryUc60',
-      discount_roulette_inventory:'setInventoryDiscount25',
-      uc30_roulette_inventory:'setInventoryUc30',
-      butterfly_roulette_inventory:'setInventoryButterfly'
-    };
-    for(const [key,id] of Object.entries(ids)){
-      const el=document.getElementById(id);
-      if(el && settings[key]!==undefined) el.value=settings[key];
-    }
-    updateWeightTotal();
-    toast('Настройки сохранены');
+    cfg=cfg||{}; cfg.rewardInventory={discount25:Number(settings.discount_roulette_inventory??payload.discount_roulette_inventory),uc60:Number(settings.uc_roulette_inventory??payload.uc_roulette_inventory),uc30:Number(settings.uc30_roulette_inventory??payload.uc30_roulette_inventory),butterfly:Number(settings.butterfly_roulette_inventory??payload.butterfly_roulette_inventory)};
+    renderRewardStocks();
+    renderRouletteSlotSettings(settings);
+    try{ cfg=await (await fetch('/api/config',{cache:'no-store'})).json(); }catch{}
+    renderDynamicWheel();
+    toast('Настройки рулетки сохранены');
     await loadAdmin();
   }catch(e){toast(e.message)}
 }

@@ -118,25 +118,81 @@ const defaults = {
   uc_roulette_inventory: '1',
   discount_roulette_inventory: '-1',
   uc30_roulette_inventory: '0',
-  butterfly_roulette_inventory: '0'
+  butterfly_roulette_inventory: '0',
+  slot_c150a_kind: 'coins',
+  slot_c150a_value: '150',
+  slot_c100a_kind: 'coins',
+  slot_c100a_value: '100',
+  slot_discount25_kind: 'discount',
+  slot_discount25_value: '25',
+  slot_uc30_kind: 'uc',
+  slot_uc30_value: '30',
+  slot_butterfly_kind: 'butterfly',
+  slot_butterfly_value: 'Нож-бабочка',
+  slot_nothing_kind: 'nothing',
+  slot_nothing_value: '0',
+  slot_uc60_kind: 'uc',
+  slot_uc60_value: '60',
+  slot_c100b_kind: 'coins',
+  slot_c100b_value: '100',
+  slot_c150b_kind: 'coins',
+  slot_c150b_value: '150',
+  slot_c50a_kind: 'coins',
+  slot_c50a_value: '50'
 };
 const setDefault = db.prepare(`INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)`);
 for (const [k,v] of Object.entries(defaults)) setDefault.run(k,v);
 
 db.prepare(`INSERT OR IGNORE INTO tasks(key,title,reward) VALUES ('channel','Подпишитесь на наш канал',50)`).run();
 
-const resultPool = [
-  { id:'c50a', label:'50 монет', kind:'coins', value:50, weightKey:'weight_c50a' },
-  { id:'c100a', label:'100 монет', kind:'coins', value:100, weightKey:'weight_c100a' },
-  { id:'c150a', label:'150 монет', kind:'coins', value:150, weightKey:'weight_c150a' },
-  { id:'c100b', label:'100 монет', kind:'coins', value:100, weightKey:'weight_c100b' },
-  { id:'c150b', label:'150 монет', kind:'coins', value:150, weightKey:'weight_c150b' },
-  { id:'discount25', label:'Скидка 25%', kind:'code', value:'25% скидка', weightKey:'weight_discount25', inventoryKey:'discount_roulette_inventory' },
-  { id:'uc60', label:'60 UC', kind:'code', value:'60 UC', weightKey:'weight_uc60', inventoryKey:'uc_roulette_inventory' },
-  { id:'uc30', label:'30 UC', kind:'code', value:'30 UC', weightKey:'weight_uc30', inventoryKey:'uc30_roulette_inventory' },
-  { id:'butterfly', label:'Нож-бабочка', kind:'code', value:'Нож-бабочка', weightKey:'weight_butterfly', inventoryKey:'butterfly_roulette_inventory' },
-  { id:'nothing', label:'Ничего', kind:'nothing', value:0, weightKey:'weight_nothing' }
+const rouletteSlots = [
+  { id:'c150a', weightKey:'weight_c150a', fallbackKind:'coins', fallbackValue:'150' },
+  { id:'c100a', weightKey:'weight_c100a', fallbackKind:'coins', fallbackValue:'100' },
+  { id:'discount25', weightKey:'weight_discount25', fallbackKind:'discount', fallbackValue:'25' },
+  { id:'uc30', weightKey:'weight_uc30', fallbackKind:'uc', fallbackValue:'30' },
+  { id:'butterfly', weightKey:'weight_butterfly', fallbackKind:'butterfly', fallbackValue:'Нож-бабочка' },
+  { id:'nothing', weightKey:'weight_nothing', fallbackKind:'nothing', fallbackValue:'0' },
+  { id:'uc60', weightKey:'weight_uc60', fallbackKind:'uc', fallbackValue:'60' },
+  { id:'c100b', weightKey:'weight_c100b', fallbackKind:'coins', fallbackValue:'100' },
+  { id:'c150b', weightKey:'weight_c150b', fallbackKind:'coins', fallbackValue:'150' },
+  { id:'c50a', weightKey:'weight_c50a', fallbackKind:'coins', fallbackValue:'50' }
 ];
+
+function slotResult(slot){
+  const kind=String(settingText(`slot_${slot.id}_kind`) || slot.fallbackKind);
+  const raw=settingText(`slot_${slot.id}_value`) || slot.fallbackValue;
+  let value=raw;
+  let label='';
+  let inventoryKey=null;
+  if(kind==='coins'){
+    const n=Math.max(0,Math.floor(Number(raw)||0)); value=n; label=`${n} монет`;
+  } else if(kind==='discount'){
+    const n=Math.min(100,Math.max(1,Math.floor(Number(raw)||0))); value=`${n}% скидка`; label=`Скидка ${n}%`; inventoryKey='discount_roulette_inventory';
+  } else if(kind==='uc'){
+    const n=Math.max(1,Math.floor(Number(raw)||0)); value=`${n} UC`; label=`${n} UC`;
+    inventoryKey=n===60?'uc_roulette_inventory':n===30?'uc30_roulette_inventory':null;
+  } else if(kind==='butterfly'){
+    value='Нож-бабочка'; label='Нож-бабочка'; inventoryKey='butterfly_roulette_inventory';
+  } else {
+    value=0; label='Ничего';
+  }
+  return {id:slot.id,label,kind,value,weightKey:slot.weightKey,inventoryKey,weight:Math.max(0,Number(setting(slot.weightKey))||0)};
+}
+function settingText(k){ return db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value ?? ''; }
+
+function pickResult(){
+  const pool=rouletteSlots
+    .map(slotResult)
+    .filter(r => !r.inventoryKey || setting(r.inventoryKey) < 0 || setting(r.inventoryKey) > 0);
+  const scale=1000;
+  const weights=pool.map(r=>Math.max(0,Math.round(r.weight*scale)));
+  const total=weights.reduce((a,w)=>a+w,0);
+  if(total<=0) return {id:'nothing',label:'Ничего',kind:'nothing',value:0,weightKey:'weight_nothing',weight:1};
+  const finalTotal=scale*100;
+  let x=crypto.randomInt(finalTotal);
+  for(let i=0;i<pool.length;i++){ x-=weights[i]; if(x<0) return pool[i]; }
+  return {id:'unassigned',label:'Без награды',kind:'nothing',value:0,weightKey:null,weight:100-total/scale};
+}
 
 function now(){ return Math.floor(Date.now()/1000); }
 function setting(k){ return Number(db.prepare('SELECT value FROM settings WHERE key=?').get(k)?.value ?? 0); }
@@ -243,7 +299,8 @@ app.get('/api/telegram/diagnostics',async (req,res)=>{
 });
 
 app.get('/api/config',(req,res)=>{
-  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,secondChannelUrl:SECOND_CHANNEL_URL,secondChannelUsername:SECOND_CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),freeSpinLimit:100,paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),secondChannelReward:setting('second_channel_reward'),rewardInventory:{discount25:setting('discount_roulette_inventory'),uc60:setting('uc_roulette_inventory'),uc30:setting('uc30_roulette_inventory'),butterfly:setting('butterfly_roulette_inventory')}});
+  const roulette=rouletteSlots.map(slot=>{ const r=slotResult(slot); return {id:slot.id,label:r.label,kind:r.kind,value:r.value,inventoryKey:r.inventoryKey}; });
+  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,secondChannelUrl:SECOND_CHANNEL_URL,secondChannelUsername:SECOND_CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),freeSpinLimit:100,paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),secondChannelReward:setting('second_channel_reward'),rewardInventory:{discount25:setting('discount_roulette_inventory'),uc60:setting('uc_roulette_inventory'),uc30:setting('uc30_roulette_inventory'),butterfly:setting('butterfly_roulette_inventory')},roulette});
 });
 
 app.get('/api/me',(req,res)=>{
@@ -289,7 +346,7 @@ app.post('/api/spin',(req,res)=>{
   tx();
   let code=null;
   if(result.kind==='code'){
-    const prefix=result.id==='uc60'?'UC60':result.id==='uc30'?'UC30':result.id==='butterfly'?'KNF':'SALE';
+    const prefix=result.kind==='uc'?'UC':result.kind==='butterfly'?'KNF':result.kind==='discount'?'SALE':'REWARD';
     code=randomCode(prefix);
     const expires=t+setting('code_days')*86400;
     db.prepare('INSERT INTO codes(code,user_id,reward_type,reward_value,source,expires_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)')
@@ -441,7 +498,8 @@ app.post('/api/admin/gift-150',async (req,res)=>{
 });
 app.post('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
-  const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_uc30','weight_butterfly','weight_nothing','uc_roulette_inventory','discount_roulette_inventory','uc30_roulette_inventory','butterfly_roulette_inventory'];
+  const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_uc30','weight_butterfly','weight_nothing','uc_roulette_inventory','discount_roulette_inventory','uc30_roulette_inventory','butterfly_roulette_inventory',
+    ...rouletteSlots.flatMap(s=>[`slot_${s.id}_kind`,`slot_${s.id}_value`])];
   const update=db.prepare('UPDATE settings SET value=? WHERE key=?');
   const weightKeys=['weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_uc30','weight_butterfly','weight_nothing'];
   const submittedWeights=weightKeys.filter(k=>req.body[k]!==undefined);
@@ -451,8 +509,22 @@ app.post('/api/admin/settings',(req,res)=>{
     if(!weightKeys.every(k=>Number.isFinite(Number(req.body[k])) && Number(req.body[k])>=0 && Number(req.body[k])<=100)) return res.status(400).json({error:'Шансы должны быть от 0 до 100%'});
     if(total>100.000001) return res.status(400).json({error:`Сумма шансов не может быть больше 100%. Сейчас ${total.toFixed(1)}%`});
   }
+  const slotKinds=['coins','discount','uc','butterfly','nothing'];
+  for(const slot of rouletteSlots){
+    const kk=`slot_${slot.id}_kind`, vk=`slot_${slot.id}_value`;
+    if(req.body[kk]!==undefined && !slotKinds.includes(String(req.body[kk]))) return res.status(400).json({error:'Недопустимый тип награды рулетки'});
+    if(req.body[vk]!==undefined && String(req.body[vk]).length>60) return res.status(400).json({error:'Значение награды слишком длинное'});
+  }
   for(const k of allowed){
     if(req.body[k]===undefined) continue;
+    if(k.startsWith('slot_') && k.endsWith('_kind')){
+      update.run(String(req.body[k]),k);
+      continue;
+    }
+    if(k.startsWith('slot_') && k.endsWith('_value')){
+      update.run(String(req.body[k]),k);
+      continue;
+    }
     const n=Number(req.body[k]);
     if(!Number.isFinite(n)) return res.status(400).json({error:`Некорректное значение: ${k}`});
     if(['uc_roulette_inventory','uc30_roulette_inventory','butterfly_roulette_inventory'].includes(k) && n<0) return res.status(400).json({error:`Количество ${k} не может быть отрицательным`});
@@ -463,12 +535,12 @@ app.post('/api/admin/settings',(req,res)=>{
     update.run(String(req.body[k]),k);
   }
   const saved=db.prepare('SELECT key,value FROM settings').all();
-  res.json({ok:true,settings:Object.fromEntries(saved.map(x=>[x.key,Number(x.value)]))});
+  res.json({ok:true,settings:Object.fromEntries(saved.map(x=>[x.key, x.key.endsWith('_kind') ? x.value : Number(x.value)]))});
 });
 app.get('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
   const rows=db.prepare('SELECT key,value FROM settings').all();
-  res.json(Object.fromEntries(rows.map(x=>[x.key,Number(x.value)])));
+  res.json(Object.fromEntries(rows.map(x=>[x.key, x.key.endsWith('_kind') ? x.value : Number(x.value)])));
 });
 
 function maybeRewardReferral(userId,t=now()){
