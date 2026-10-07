@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS settings (
 
 const defaults = {
   free_spin_hours: '24',
+  free_spin_limit: '100',
   paid_spin_cost: '100',
   paid_spin_limit: '5',
   code_days: '10',
@@ -234,20 +235,22 @@ app.get('/api/telegram/diagnostics',async (req,res)=>{
 });
 
 app.get('/api/config',(req,res)=>{
-  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
+  res.json({channelUrl:CHANNEL_URL,channelUsername:CHANNEL_USERNAME,botUsername:BOT_USERNAME,exchangeCoins:setting('exchange_coins'),exchangeUc:setting('exchange_uc'),exchangeDiscountCoins:setting('exchange_discount_coins'),exchangeDiscountPercent:setting('exchange_discount_percent'),freeSpinHours:setting('free_spin_hours'),freeSpinLimit:setting('free_spin_limit'),paidSpinCost:setting('paid_spin_cost'),paidSpinLimit:setting('paid_spin_limit'),referralReward:setting('referral_reward'),channelReward:setting('channel_reward'),ucRouletteInventory:setting('uc_roulette_inventory')});
 });
 
 app.get('/api/me',(req,res)=>{
   const x=requireUser(req,res); if(!x) return;
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(x.tgUser.id);
   db.prepare("UPDATE codes SET status='expired',updated_at=? WHERE user_id=? AND status='pending' AND expires_at<=?").run(now(),u.id,now());
-  const lastFree=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' ORDER BY created_at DESC LIMIT 1").get(u.id)?.created_at||0;
+  const freeSince=now()-86400;
+  const freeCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='free' AND created_at>?").get(u.id,freeSince).c;
+  const freeOldest=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' AND created_at>? ORDER BY created_at ASC LIMIT 1").get(u.id,freeSince)?.created_at||0;
   const paidSince=now()-86400;
   const paidCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='paid' AND created_at>?").get(u.id,paidSince).c;
   const claims=db.prepare('SELECT task_key FROM task_claims WHERE user_id=?').all(u.id).map(x=>x.task_key);
   const codes=db.prepare('SELECT code,reward_type,reward_value,status,expires_at,created_at FROM codes WHERE user_id=? ORDER BY created_at DESC').all(u.id);
   const referralCount=db.prepare('SELECT COUNT(*) c FROM users WHERE referred_by=?').get(u.id).c;
-  res.json({user:u,referralCount,freeAvailable:now()-lastFree>=setting('free_spin_hours')*3600,freeNextAt:lastFree+setting('free_spin_hours')*3600,paidUsed:paidCount,paidLeft:Math.max(0,setting('paid_spin_limit')-paidCount),claims,codes,admin:String(u.id)===ADMIN_ID});
+  res.json({user:u,referralCount,freeUsed:freeCount,freeLeft:Math.max(0,setting('free_spin_limit')-freeCount),freeAvailable:freeCount<setting('free_spin_limit'),freeNextAt:freeCount>=setting('free_spin_limit')&&freeOldest?freeOldest+86400:0,paidUsed:paidCount,paidLeft:Math.max(0,setting('paid_spin_limit')-paidCount),claims,codes,admin:String(u.id)===ADMIN_ID});
 });
 
 app.post('/api/spin',(req,res)=>{
@@ -255,8 +258,12 @@ app.post('/api/spin',(req,res)=>{
   const paid=!!req.body.paid;
   const u=db.prepare('SELECT * FROM users WHERE id=?').get(x.tgUser.id);
   db.prepare("UPDATE codes SET status='expired',updated_at=? WHERE user_id=? AND status='pending' AND expires_at<=?").run(now(),u.id,now());
-  const lastFree=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' ORDER BY created_at DESC LIMIT 1").get(u.id)?.created_at||0;
-  if(!paid && now()-lastFree<setting('free_spin_hours')*3600) return res.status(400).json({error:'Бесплатный прокрут ещё недоступен',nextAt:lastFree+setting('free_spin_hours')*3600});
+  const freeSince=now()-86400;
+  const freeCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='free' AND created_at>?").get(u.id,freeSince).c;
+  if(!paid && freeCount>=setting('free_spin_limit')){
+    const oldestFree=db.prepare("SELECT created_at FROM spins WHERE user_id=? AND type='free' AND created_at>? ORDER BY created_at ASC LIMIT 1").get(u.id,freeSince)?.created_at||0;
+    return res.status(400).json({error:'Лимит бесплатных прокрутов за 24 часа исчерпан',nextAt:oldestFree?oldestFree+86400:now()+86400});
+  }
   const paidCount=db.prepare("SELECT COUNT(*) c FROM spins WHERE user_id=? AND type='paid' AND created_at>?").get(u.id,now()-86400).c;
   if(paid && paidCount>=setting('paid_spin_limit')) return res.status(400).json({error:'Лимит платных прокрутов за 24 часа исчерпан'});
   if(paid && u.coins<setting('paid_spin_cost')) return res.status(400).json({error:'Недостаточно монет'});
@@ -373,7 +380,7 @@ app.get('/api/admin/users',(req,res)=>{
 });
 app.post('/api/admin/settings',(req,res)=>{
   if(!requireAdmin(req,res)) return;
-  const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_nothing','uc_roulette_inventory'];
+  const allowed=['exchange_coins','exchange_uc','exchange_discount_coins','exchange_discount_percent','referral_reward','channel_reward','paid_spin_cost','paid_spin_limit','code_days','free_spin_hours','free_spin_limit','weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_nothing','uc_roulette_inventory'];
   const update=db.prepare('UPDATE settings SET value=? WHERE key=?');
   const weightKeys=['weight_c50a','weight_c100a','weight_c150a','weight_c100b','weight_c150b','weight_discount25','weight_uc60','weight_nothing'];
   const submittedWeights=weightKeys.filter(k=>req.body[k]!==undefined);

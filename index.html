@@ -258,7 +258,7 @@ let me=null,cfg=null;
 // Load public configuration independently of Telegram authentication so the
 // channel button can always work even if the user session needs re-auth.
 async function loadPublicConfig(){
-  try{ cfg=await (await fetch('/api/config',{cache:'no-store'})).json(); if(cfg) cfg.freeSpinHours=Number(cfg.freeSpinHours||24); }catch(e){ cfg=cfg||{}; }
+  try{ cfg=await (await fetch('/api/config',{cache:'no-store'})).json(); if(cfg){ cfg.freeSpinHours=Number(cfg.freeSpinHours||24); cfg.freeSpinLimit=Number(cfg.freeSpinLimit||100); } }catch(e){ cfg=cfg||{}; }
 }
 loadPublicConfig();
 
@@ -609,17 +609,20 @@ function updateSpinState(){
     paidBtn.disabled=spinning || Number(me.paidLeft||0)<=0 || Number(me.user?.coins||0)<Number(cfg?.paidSpinCost||100);
     paidBtn.textContent=`🪙 Прокрут за ${Number(cfg?.paidSpinCost||100)} монет`;
   }
+  const freeLimit=Number(cfg?.freeSpinLimit||100);
+  const freeUsed=Number(me.freeUsed||0);
+  const freeLeft=Number(me.freeLeft??Math.max(0,freeLimit-freeUsed));
   if(me.freeAvailable){
     btn.disabled=spinning;
-    btn.textContent=spinning?'⏳ Колесо вращается…':'🎡 Крутить колесо';
-    status.textContent=spinning?'Подожди, идёт вращение…':'Бесплатный прокрут доступен';
+    btn.textContent=spinning?'⏳ Колесо вращается…':'🎡 Бесплатный прокрут';
+    status.textContent=spinning?'Подожди, идёт вращение…':`Бесплатных прокрутов: ${freeLeft}/${freeLimit} за 24 часа`;
     return;
   }
   btn.disabled=true;
-  btn.textContent='⏱ Следующий прокрут';
+  btn.textContent='⏱ Лимит бесплатных прокрутов';
   const tick=()=>{
     const left=(me.freeNextAt||0)-Math.floor(Date.now()/1000);
-    if(left<=0){me.freeAvailable=true;updateSpinState();return;}
+    if(left<=0){loadMe();return;}
     status.textContent='Следующий бесплатный прокрут через '+formatTime(left);
   };
   tick(); cooldownTimer=setInterval(tick,1000);
@@ -680,8 +683,10 @@ async function spin(){
     syncWheelLabels();
     setTimeout(()=>{
       me.user.coins=j.coins;
-      me.freeAvailable=false;
-      me.freeNextAt=Math.floor(Date.now()/1000)+(cfg?.freeSpinHours||24)*3600;
+      me.freeUsed=Number(me.freeUsed||0)+1;
+      me.freeLeft=Math.max(0,Number(me.freeLeft??(cfg?.freeSpinLimit||100))-1);
+      me.freeAvailable=me.freeLeft>0;
+      if(!me.freeAvailable) me.freeNextAt=Math.floor(Date.now()/1000)+(cfg?.freeSpinHours||24)*3600;
       document.getElementById('coins').textContent=j.coins;
       renderProfile();
       renderMyCodes();
