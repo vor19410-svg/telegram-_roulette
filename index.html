@@ -545,8 +545,18 @@ async function loadMe(){
   }catch(e){toast(e.message)}
 }
 function openChannel(){
-  if(!cfg?.channelUrl){toast('Ссылка на канал не настроена');return}
-  if(tg?.openTelegramLink) tg.openTelegramLink(cfg.channelUrl); else window.open(cfg.channelUrl,'_blank');
+  let url=String(cfg?.channelUrl||'').trim();
+  if(!url){
+    const u=String(cfg?.channelUsername||'').trim().replace(/^@/,'');
+    if(u) url=`https://t.me/${u}`;
+  }
+  if(!url){toast('Ссылка на канал не настроена');return}
+  if(!/^https?:\/\//i.test(url)){toast('Неверная ссылка на канал');return}
+  try{
+    if(tg?.openTelegramLink){ tg.openTelegramLink(url); return; }
+    if(tg?.openLink){ tg.openLink(url); return; }
+  }catch(e){}
+  try{ window.location.href=url; }catch(e){ window.open(url,'_blank'); }
 }
 async function claimChannel(){
   try{const j=await api('/api/task/channel/claim',{method:'POST'});toast(`Задание выполнено. +${j.reward} 🪙`);loadMe()}
