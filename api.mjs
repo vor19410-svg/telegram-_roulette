@@ -21,9 +21,7 @@ const rewards = [
 
 const tasks = [
   {id:'t1',name:'Подпишись на канал Elite Force',icon:'📢'},
-  {id:'t2',name:'Открой раздел рулетки',icon:'🎰'},
-  {id:'t3',name:'Пригласи друга',icon:'👥'},
-  {id:'t4',name:'Забери ежедневный бонус',icon:'🎁'}
+  {id:'t2',name:'Посети раздел заданий',icon:'☑'}
 ];
 
 import fs from 'node:fs/promises';
@@ -86,7 +84,7 @@ function validateInitData(initData){
 }
 
 function defaultState(user){
-  return {telegramId:String(user.id),username:user.username?`@${user.username}`:(user.first_name||'@EliteForcePlayer'),coins:250,earned:0,lastSpin:0,lastDaily:0,inventory:[],history:[],wins:0,spins:0,streak:1,tasks:{},refs:0,completedFriends:0,refEarned:0,friendTasks:0,doubleNext:false};
+  return {telegramId:String(user.id),username:user.username?`@${user.username}`:(user.first_name||'@EliteForcePlayer'),coins:250,earned:0,lastSpin:0,spinDay:'',freeSpinsUsed:0,lastDaily:0,inventory:[],history:[],wins:0,spins:0,streak:1,tasks:{},refs:0,completedFriends:0,refEarned:0,friendTasks:0,doubleNext:false};
 }
 async function getUser(user){
   const store=users();
@@ -136,7 +134,7 @@ export default async function(req){
     const body=authResult.body;
     const state=await getUser(user);
 
-    if(action==='state') return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id)});
+    if(action==='state'){const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;}state.freeSpinsLeft=Math.max(0,3-Number(state.freeSpinsUsed||0));await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id)});}
 
     if(action==='daily'){
       if(Date.now()-state.lastDaily<DAY) return fail('Ежедневный бонус уже получен');
@@ -153,11 +151,14 @@ export default async function(req){
     }
 
     if(action==='spin'){
-      const now=Date.now(), free=now-state.lastSpin>=DAY;
-      const repeatCost=free?0:100;
+      const now=Date.now();
+      const dayKey=new Date(now).toISOString().slice(0,10);
+      if(state.spinDay!==dayKey){state.spinDay=dayKey;state.freeSpinsUsed=0;}
+      state.freeSpinsUsed=Number(state.freeSpinsUsed||0);
+      const free=state.freeSpinsUsed<3;
       if(!free && state.coins<100) return fail('Нужно 100 монет для повторного прокрута');
-      if(repeatCost) state.coins-=repeatCost;
-      state.lastSpin=free?now:state.lastSpin; state.spins++;
+      if(free) state.freeSpinsUsed++; else state.coins-=100;
+      state.lastSpin=now; state.freeSpinsLeft=Math.max(0,3-state.freeSpinsUsed); state.spins++;
       const idx=pickIndex(), r=rewards[idx];
       let multiplier=1;
       if(state.doubleNext && r.name!=='Двойная награда'){multiplier=2;state.doubleNext=false}
