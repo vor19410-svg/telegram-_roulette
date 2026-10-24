@@ -4,6 +4,7 @@ const DAY = 86400000;
 const CODE_TTL = 10 * DAY;
 const ADMIN_ID = String(process.env.ADMIN_TELEGRAM_ID || '').trim();
 const BOT_TOKEN = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
+const BOT_USERNAME = String(process.env.TELEGRAM_BOT_USERNAME || '').replace(/^@/, '').trim();
 
 const rewards = [
   {name:'FULL 6',icon:'🥷',type:'item',p:0.1},
@@ -49,6 +50,9 @@ function makeStore(name) {
 const users = () => makeStore('users');
 const codes = () => makeStore('codes');
 const stockStore = () => makeStore('stock');
+const settingsStore = () => makeStore('settings');
+const DEFAULT_SETTINGS = {referrerReward:70, inviteeReward:35, freeSpins:3,spinCost:100,catalog: Object.entries({'FULL 6':{cost:10000,icon:'🥷'},'Пушка':{cost:5000,icon:'🔫'},'30 UC':{cost:1800,icon:'🎮'},'60 UC':{cost:3500,icon:'💎'},'Шлем':{cost:1200,icon:'🪖'},'Броня':{cost:1500,icon:'🦺'},'Сумка':{cost:1000,icon:'🎒'}}).map(([name,v])=>({name,...v,stock:100})), rewards: rewards.map(r=>({name:r.name,icon:r.icon,p:r.p}))};
+async function getSettings(){const s=await settingsStore().get('main',{type:'json'});return s||structuredClone(DEFAULT_SETTINGS)}
 const exchangeCatalog = { 'FULL 6':{cost:10000,icon:'🥷'}, 'Пушка':{cost:5000,icon:'🔫'}, '30 UC':{cost:1800,icon:'🎮'}, '60 UC':{cost:3500,icon:'💎'}, 'Шлем':{cost:1200,icon:'🪖'}, 'Броня':{cost:1500,icon:'🦺'}, 'Сумка':{cost:1000,icon:'🎒'} };
 async function getStock(name){ const st=stockStore(); let n=await st.get(name,{type:'json'}); if(n===null){n=100; await st.setJSON(name,n,{onlyIfNew:true});} return Number(n); }
 async function setStock(name,n){ await stockStore().setJSON(name,Math.max(0,n)); }
@@ -113,16 +117,30 @@ async function notifyAdmin(item){
     await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:ADMIN_ID,text:`🎁 Elite Force\nНовый код\n\nПриз: ${item.prize}\nКод: ${item.code}\nПользователь: ${item.username}\nTelegram ID: ${item.telegramId}\nВыдан: ${item.date}\nДействует до: ${new Date(item.expiresAt).toLocaleDateString('ru-RU')}`})});
   }catch{}
 }
-function pickIndex(){
-  const total=rewards.reduce((a,r)=>a+r.p,0); let x=Math.random()*total;
-  for(let i=0;i<rewards.length;i++){x-=rewards[i].p;if(x<0)return i}
-  return rewards.length-1;
-}
+function pickIndex(probabilities=rewards){ const total=probabilities.reduce((a,r)=>a+Number(r.p||0),0); if(total<=0)return rewards.length-1; let x=Math.random()*total; for(let i=0;i<probabilities.length;i++){x-=Number(probabilities[i].p||0);if(x<0)return i} return probabilities.length-1; }
 function publicState(s){return {...s,username:s.username};}
 
 async function auth(req){
   const body=await req.json().catch(()=>({}));
   return {user:validateInitData(body.initData),body};
+}
+async function processReferral(state, startParam){
+  const raw=String(startParam||'');
+  const match=raw.match(/^(?:ref_|EF)([0-9]{3,20})$/i);
+  if(!match || state.referralProcessed || String(state.telegramId)===match[1]) return false;
+  const referrerId=match[1];
+  const referrer=await users().get(referrerId,{type:'json'});
+  if(!referrer) return false;
+  const settings=await getSettings();
+  const referralDb=await readDb('referrals');
+  if(referralDb[String(state.telegramId)]) return false;
+  referralDb[String(state.telegramId)]={referrerId,inviteeId:String(state.telegramId),date:Date.now()};
+  await writeDb('referrals',referralDb);
+  const referrerReward=Math.max(0,Math.floor(Number(settings.referrerReward??70)));
+  const inviteeReward=Math.max(0,Math.floor(Number(settings.inviteeReward??35)));
+  referrer.coins=Number(referrer.coins||0)+referrerReward; referrer.earned=Number(referrer.earned||0)+referrerReward; referrer.refs=Number(referrer.refs||0)+1; referrer.refEarned=Number(referrer.refEarned||0)+referrerReward; await putUser(referrer);
+  state.coins=Number(state.coins||0)+inviteeReward; state.earned=Number(state.earned||0)+inviteeReward; state.referralProcessed=true; state.referredBy=referrerId;
+  return true;
 }
 
 export default async function(req){
@@ -134,7 +152,7 @@ export default async function(req){
     const body=authResult.body;
     const state=await getUser(user);
 
-    if(action==='state'){const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;}state.freeSpinsLeft=Math.max(0,3-Number(state.freeSpinsUsed||0));await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id)});}
+    if(action==='state'){await processReferral(state, body.startParam);const settings=await getSettings();const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;}state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-Number(state.freeSpinsUsed||0));await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id),botUsername:BOT_USERNAME});}
 
     if(action==='daily'){
       if(Date.now()-state.lastDaily<DAY) return fail('Ежедневный бонус уже получен');
@@ -151,15 +169,15 @@ export default async function(req){
     }
 
     if(action==='spin'){
-      const now=Date.now();
+      const settings=await getSettings(); const now=Date.now();
       const dayKey=new Date(now).toISOString().slice(0,10);
       if(state.spinDay!==dayKey){state.spinDay=dayKey;state.freeSpinsUsed=0;}
       state.freeSpinsUsed=Number(state.freeSpinsUsed||0);
-      const free=state.freeSpinsUsed<3;
-      if(!free && state.coins<100) return fail('Нужно 100 монет для повторного прокрута');
-      if(free) state.freeSpinsUsed++; else state.coins-=100;
-      state.lastSpin=now; state.freeSpinsLeft=Math.max(0,3-state.freeSpinsUsed); state.spins++;
-      const idx=pickIndex(), r=rewards[idx];
+      const free=state.freeSpinsUsed<Number(settings.freeSpins);
+      if(!free && state.coins<Number(settings.spinCost)) return fail(`Нужно ${settings.spinCost} монет для повторного прокрута`);
+      if(free) state.freeSpinsUsed++; else state.coins-=Number(settings.spinCost);
+      state.lastSpin=now; state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-state.freeSpinsUsed); state.spins++;
+      const weighted=settings.rewards; const idx=pickIndex(weighted); const r=rewards.find(x=>x.name===weighted[idx]?.name)||rewards[rewards.length-1];
       let multiplier=1;
       if(state.doubleNext && r.name!=='Двойная награда'){multiplier=2;state.doubleNext=false}
       if(r.name==='Двойная награда') state.doubleNext=true;
@@ -176,12 +194,11 @@ export default async function(req){
     }
 
     if(action==='exchange'){
-      const name=String(body.name||'');
-      const item=exchangeCatalog[name]; if(!item)return fail('Эта награда недоступна для обмена');
-      if(state.coins<item.cost)return fail('Недостаточно монет');
-      const remaining=await getStock(name); if(remaining<=0)return fail('Эта награда закончилась. Попробуй позже.');
-      state.coins-=item.cost;
-      await setStock(name,remaining-1);
+      const name=String(body.name||''); const settings=await getSettings();
+      const item=settings.catalog.find(x=>x.name===name); if(!item)return fail('Эта награда недоступна для обмена');
+      if(state.coins<Number(item.cost))return fail('Недостаточно монет');
+      const remaining=Number(item.stock ?? await getStock(name)); if(remaining<=0)return fail('Эта награда закончилась. Попробуй позже.');
+      state.coins-=Number(item.cost); item.stock=remaining-1; await settingsStore().setJSON('main',settings);
       const code=await createCode(state,name); await notifyAdmin(code);
       state.inventory.unshift({name,icon:item.icon,date:new Date().toLocaleString('ru-RU'),quantity:1,code:code.code});
       state.history.unshift({name:'Обмен: '+name,icon:item.icon,date:new Date().toLocaleString('ru-RU'),code:code.code});
@@ -189,6 +206,22 @@ export default async function(req){
       return json({ok:true,state,code,remaining:remaining-1});
     }
 
+    if(action==='admin-settings'){
+      if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
+      const settings=await getSettings(); return json({ok:true,settings});
+    }
+    if(action==='admin-settings-save'){
+      if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
+      const settings=await getSettings();
+      const freeSpins=Number(body.freeSpins), spinCost=Number(body.spinCost);
+      if(!Number.isInteger(freeSpins)||freeSpins<0||freeSpins>20||!Number.isFinite(spinCost)||spinCost<0) return fail('Проверь количество прокруток и цену');
+      settings.freeSpins=freeSpins; settings.spinCost=Math.floor(spinCost);
+      if(body.referrerReward!==undefined) settings.referrerReward=Math.max(0,Math.floor(Number(body.referrerReward)));
+      if(body.inviteeReward!==undefined) settings.inviteeReward=Math.max(0,Math.floor(Number(body.inviteeReward)));
+      if(Array.isArray(body.catalog)) for(const x of body.catalog){const item=settings.catalog.find(y=>y.name===x.name);if(item){if(!Number.isFinite(Number(x.cost))||Number(x.cost)<0||!Number.isFinite(Number(x.stock))||Number(x.stock)<0)return fail('Цена и остаток должны быть неотрицательными числами');item.cost=Math.floor(Number(x.cost));item.stock=Math.floor(Number(x.stock));}}
+      if(Array.isArray(body.probabilities)){const total=body.probabilities.reduce((a,x)=>a+Number(x.p),0);if(body.probabilities.some(x=>!Number.isFinite(Number(x.p))||Number(x.p)<0)||total<=0)return fail('Вероятности должны быть неотрицательными, сумма больше нуля');for(const x of body.probabilities){const r=settings.rewards.find(y=>y.name===x.name);if(r)r.p=Number(x.p);}}
+      await settingsStore().setJSON('main',settings); return json({ok:true,settings});
+    }
     if(action==='admin-codes'){
       if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
       const arr=[];
