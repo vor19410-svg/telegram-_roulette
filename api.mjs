@@ -50,6 +50,10 @@ function makeStore(name) {
 }
 const users = () => makeStore('users');
 const codes = () => makeStore('codes');
+const stockStore = () => makeStore('stock');
+const exchangeCatalog = { 'FULL 6':{cost:10000,icon:'🥷'}, 'Пушка':{cost:5000,icon:'🔫'}, '30 UC':{cost:1800,icon:'🎮'}, '60 UC':{cost:3500,icon:'💎'}, 'Шлем':{cost:1200,icon:'🪖'}, 'Броня':{cost:1500,icon:'🦺'}, 'Сумка':{cost:1000,icon:'🎒'} };
+async function getStock(name){ const st=stockStore(); let n=await st.get(name,{type:'json'}); if(n===null){n=100; await st.setJSON(name,n,{onlyIfNew:true});} return Number(n); }
+async function setStock(name,n){ await stockStore().setJSON(name,Math.max(0,n)); }
 
 function json(data, status=200){
   return Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
@@ -172,16 +176,16 @@ export default async function(req){
 
     if(action==='exchange'){
       const name=String(body.name||'');
-      const catalog={'Скидка 25% на экипировку':800,'60 UC':3000,'30 UC':1800};
-      const cost=catalog[name]; if(!cost)return fail('Недоступный обмен');
-      if(state.coins<cost)return fail('Недостаточно монет');
-      state.coins-=cost;
-      const r=rewards.find(x=>x.name===name) || {name,icon:name==='60 UC'?'💎':'🎟️'};
+      const item=exchangeCatalog[name]; if(!item)return fail('Эта награда недоступна для обмена');
+      if(state.coins<item.cost)return fail('Недостаточно монет');
+      const remaining=await getStock(name); if(remaining<=0)return fail('Эта награда закончилась. Попробуй позже.');
+      state.coins-=item.cost;
+      await setStock(name,remaining-1);
       const code=await createCode(state,name); await notifyAdmin(code);
-      state.inventory.unshift({name,icon:r.icon,date:new Date().toLocaleString('ru-RU'),quantity:1,code:code.code});
-      state.history.unshift({name:'Обмен: '+name,icon:r.icon,date:new Date().toLocaleString('ru-RU'),code:code.code});
+      state.inventory.unshift({name,icon:item.icon,date:new Date().toLocaleString('ru-RU'),quantity:1,code:code.code});
+      state.history.unshift({name:'Обмен: '+name,icon:item.icon,date:new Date().toLocaleString('ru-RU'),code:code.code});
       await putUser(state);
-      return json({ok:true,state,code});
+      return json({ok:true,state,code,remaining:remaining-1});
     }
 
     if(action==='admin-codes'){

@@ -1,23 +1,17 @@
-ELITE FORCE MINI APP — Render
+ELITE FORCE MINI APP — RENDER
 
-Файлы:
-- index.html — интерфейс Telegram Mini App
-- server.js — HTTP-сервер для Render
-- api.mjs — серверная логика и хранение данных в JSON
-- package.json — команда запуска
+Файлы: index.html, server.js, api.mjs, package.json.
 
-Render:
-Build Command: npm install
-Start Command: npm start
+Render настройки:
+- Service type: Web Service
+- Build Command: npm install
+- Start Command: npm start
+- Environment: TELEGRAM_BOT_TOKEN=<токен от BotFather>
+- Environment: ADMIN_TELEGRAM_ID=<ваш Telegram ID>
+- Environment: DATA_DIR=/var/data
 
-Environment Variables:
-TELEGRAM_BOT_TOKEN = токен бота от BotFather
-ADMIN_TELEGRAM_ID = числовой Telegram ID администратора
-DATA_DIR = /var/data (если подключён Persistent Disk)
+ВАЖНО: добавьте Persistent Disk в Render с Mount Path /var/data, иначе данные могут потеряться при перезапуске/новом deploy.
 
-ВАЖНО: чтобы пользователи/балансы/коды не терялись после перезапуска и нового деплоя,
-в Render открой Settings → Disks и подключи Persistent Disk с Mount Path /var/data,
-затем задай DATA_DIR=/var/data. На бесплатном Render диски могут быть недоступны;
-без диска локальные JSON-данные могут сбрасываться при новом деплое.
+В магазине заданы начальные цены: FULL 6 — 10000; Пушка — 5000; 30 UC — 1800; 60 UC — 3500; Шлем — 1200; Броня — 1500; Сумка — 1000 монет. Начальный остаток каждой награды — 100. Изменение цен и остатков через админку пока не реализовано в этом комплекте.
 
-После настройки переменных сделай Manual Deploy → Deploy latest commit.
+Откройте приложение только через Telegram Mini App, потому что сервер проверяет Telegram initData. Не публикуйте BOT TOKEN.
