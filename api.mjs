@@ -85,7 +85,7 @@ function validateInitData(initData){
 }
 
 function defaultState(user){
-  return {telegramId:String(user.id),username:user.username?`@${user.username}`:(user.first_name||'@EliteForcePlayer'),coins:250,earned:0,lastSpin:0,spinDay:'',freeSpinsUsed:0,lastDaily:0,inventory:[],history:[],wins:0,spins:0,streak:1,tasks:{},refs:0,completedFriends:0,refEarned:0,friendTasks:0,doubleNext:false};
+  return {telegramId:String(user.id),username:user.username?`@${user.username}`:(user.first_name||'@EliteForcePlayer'),coins:0,earned:0,lastSpin:0,spinDay:'',freeSpinsUsed:0,lastDaily:0,inventory:[],history:[],wins:0,spins:0,streak:1,tasks:{},refs:0,completedFriends:0,refEarned:0,friendTasks:0,doubleNext:false};
 }
 async function getUser(user){
   const store=users();
@@ -238,7 +238,7 @@ export default async function(req){
       if(body.referrerReward!==undefined) settings.referrerReward=Math.max(0,Math.floor(Number(body.referrerReward)));
       if(body.inviteeReward!==undefined) settings.inviteeReward=Math.max(0,Math.floor(Number(body.inviteeReward)));
       if(Array.isArray(body.catalog)) for(const x of body.catalog){const item=settings.catalog.find(y=>y.name===x.name);if(item){if(!Number.isFinite(Number(x.cost))||Number(x.cost)<0||!Number.isFinite(Number(x.stock))||Number(x.stock)<0)return fail('Цена и остаток должны быть неотрицательными числами');item.cost=Math.floor(Number(x.cost));item.stock=Math.floor(Number(x.stock));}}
-      if(Array.isArray(body.probabilities)){const total=body.probabilities.reduce((a,x)=>a+Number(x.p),0);if(body.probabilities.some(x=>!Number.isFinite(Number(x.p))||Number(x.p)<0||Number(x.p)>100)||Math.abs(total-100)>0.11)return fail('Сумма вероятностей должна быть ровно 100% (допуск 0,1%).');for(const x of body.probabilities){const r=settings.rewards.find(y=>y.name===x.name);if(r)r.p=Number(x.p);}}
+      if(Array.isArray(body.probabilities)){if(body.probabilities.some(x=>!Number.isFinite(Number(x.p))||Number(x.p)<0||Number(x.p)>100))return fail('Каждая вероятность должна быть от 0 до 100%.');for(const x of body.probabilities){const r=settings.rewards.find(y=>y.name===x.name);if(r)r.p=Number(x.p);}}
       await settingsStore().setJSON('main',settings); return json({ok:true,settings});
     }
     if(action==='admin-users'){
