@@ -190,6 +190,23 @@ export default async function(req){
     if(action==='state'){await processReferral(state, body.startParam);const settings=await getSettings();const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;state.totalSpinsToday=0;}if(Number(state.freeSpinsConfigVersion??-1)!==Number(settings.freeSpinsVersion??0)){state.freeSpinsUsed=0;state.freeSpinsConfigVersion=Number(settings.freeSpinsVersion??0);}state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-Number(state.freeSpinsUsed||0));state.maxSpins=Number(settings.maxSpins??10);await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id),botUsername:BOT_USERNAME,channelUrl:process.env.TELEGRAM_CHANNEL_URL||'',catalog:settings.catalog,rewards:settings.rewards,settings:{freeSpins:settings.freeSpins,maxSpins:settings.maxSpins,spinCost:settings.spinCost}});}
 
 
+    if(action==='daily-reward'){
+      return await withUserLock(user.id, async()=>{
+        const dailyState=await getUser(user);
+        const now=Date.now();
+        const last=Number(dailyState.lastDaily||0);
+        const remaining=DAY-(now-last);
+        if(last>0 && remaining>0){
+          return json({ok:false,error:`Ежедневный подарок уже получен. Следующий будет доступен через ${Math.floor(remaining/3600000)} ч. ${Math.floor((remaining%3600000)/60000)} мин.`,state:publicState(dailyState)},429);
+        }
+        dailyState.coins=Number(dailyState.coins||0)+50;
+        dailyState.earned=Number(dailyState.earned||0)+50;
+        dailyState.lastDaily=now;
+        await putUser(dailyState);
+        return json({ok:true,state:publicState(dailyState),message:'🎁 Ежедневный подарок получен: +50 монет!'});
+      });
+    }
+
     if(action==='task'){
       const {id}=body;
       if(id!=='channel') return fail('Неизвестное задание');
