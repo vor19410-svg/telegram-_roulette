@@ -25,6 +25,19 @@ const tasks = [{id:'channel',name:'Подпишись на канал Elite Forc
 import fs from 'node:fs/promises';
 import path from 'node:path';
 const DATA_DIR = process.env.DATA_DIR || './data';
+// Serialize reward claims per player so two quick requests cannot pay the same task twice.
+const userLocks = new Map();
+async function withUserLock(userId, fn) {
+  const key=String(userId);
+  const previous=userLocks.get(key) || Promise.resolve();
+  let release;
+  const current=new Promise(resolve=>{release=resolve;});
+  const queued=previous.then(()=>current);
+  userLocks.set(key, queued);
+  await previous;
+  try { return await fn(); }
+  finally { release(); if(userLocks.get(key)===queued) userLocks.delete(key); }
+}
 async function readDb(name) {
   await fs.mkdir(DATA_DIR, {recursive:true});
   try { return JSON.parse(await fs.readFile(path.join(DATA_DIR, name+'.json'),'utf8')); }
@@ -182,11 +195,24 @@ export default async function(req){
       if(id!=='channel') return fail('Неизвестное задание');
       const isMember=await verifyChannelMembership(user.id);
       if(!isMember) return fail('Подпишись на канал и нажми «Проверить подписку»');
-      let taskRewarded=false;
-      if(!state.tasks[id]){state.tasks[id]=true;state.coins=Number(state.coins||0)+50;state.earned=Number(state.earned||0)+50;taskRewarded=true;}
-      const referralRewarded=await completeReferral(state);
-      await putUser(state);
-      return json({ok:true,state,message:taskRewarded?(referralRewarded?'✅ Подписка проверена: +50 монет за задание и реферальная награда начислена.':'✅ Подписка проверена: +50 монет'):(referralRewarded?'✅ Реферальная награда начислена.':'Это задание уже выполнено; подписка подтверждена.')});
+      return await withUserLock(user.id, async()=>{
+        // Reload the latest persisted state inside the lock; the earlier request state may be stale.
+        const taskState=await getUser(user);
+        taskState.tasks=taskState.tasks||{};
+        let taskRewarded=false;
+        if(!taskState.tasks[id]){
+          taskState.tasks[id]=true;
+          taskState.coins=Number(taskState.coins||0)+50;
+          taskState.earned=Number(taskState.earned||0)+50;
+          taskRewarded=true;
+        }
+        const referralRewarded=await completeReferral(taskState);
+        await putUser(taskState);
+        const message=taskRewarded
+          ? (referralRewarded?'✅ Подписка проверена: +50 монет за задание. Реферальная награда начислена отдельно.':'✅ Подписка проверена: +50 монет.')
+          : (referralRewarded?'✅ Задание уже было оплачено; начислена только ранее ожидавшая реферальная награда.':'Это задание уже выполнено — повторная награда не начислялась.');
+        return json({ok:true,state:publicState(taskState),message});
+      });
     }
 
     if(action==='spin'){
