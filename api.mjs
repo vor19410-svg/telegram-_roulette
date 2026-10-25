@@ -187,7 +187,7 @@ export default async function(req){
     const body=authResult.body;
     const state=await getUser(user);
 
-    if(action==='state'){await processReferral(state, body.startParam);const settings=await getSettings();const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;state.totalSpinsToday=0;}state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-Number(state.freeSpinsUsed||0));state.maxSpins=Number(settings.maxSpins??10);await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id),botUsername:BOT_USERNAME,channelUrl:process.env.TELEGRAM_CHANNEL_URL||'',catalog:settings.catalog,rewards:settings.rewards,settings:{freeSpins:settings.freeSpins,maxSpins:settings.maxSpins,spinCost:settings.spinCost}});}
+    if(action==='state'){await processReferral(state, body.startParam);const settings=await getSettings();const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;state.totalSpinsToday=0;}if(Number(state.freeSpinsConfigVersion??-1)!==Number(settings.freeSpinsVersion??0)){state.freeSpinsUsed=0;state.freeSpinsConfigVersion=Number(settings.freeSpinsVersion??0);}state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-Number(state.freeSpinsUsed||0));state.maxSpins=Number(settings.maxSpins??10);await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id),botUsername:BOT_USERNAME,channelUrl:process.env.TELEGRAM_CHANNEL_URL||'',catalog:settings.catalog,rewards:settings.rewards,settings:{freeSpins:settings.freeSpins,maxSpins:settings.maxSpins,spinCost:settings.spinCost}});}
 
 
     if(action==='task'){
@@ -219,6 +219,7 @@ export default async function(req){
       const settings=await getSettings(); const now=Date.now();
       const dayKey=new Date(now).toISOString().slice(0,10);
       if(state.spinDay!==dayKey){state.spinDay=dayKey;state.freeSpinsUsed=0;state.totalSpinsToday=0;}
+      if(Number(state.freeSpinsConfigVersion??-1)!==Number(settings.freeSpinsVersion??0)){state.freeSpinsUsed=0;state.freeSpinsConfigVersion=Number(settings.freeSpinsVersion??0);}
       state.freeSpinsUsed=Number(state.freeSpinsUsed||0);
       state.totalSpinsToday=Number(state.totalSpinsToday||0);
       if(state.totalSpinsToday>=Number(settings.maxSpins??10)) return fail(`Достигнут лимит ${Number(settings.maxSpins??10)} прокруток в день`);
@@ -265,7 +266,7 @@ export default async function(req){
       const settings=await getSettings();
       const freeSpins=Number(body.freeSpins), maxSpins=Number(body.maxSpins??10), spinCost=Number(body.spinCost);
       if(!Number.isInteger(freeSpins)||freeSpins<0||freeSpins>20||!Number.isInteger(maxSpins)||maxSpins<freeSpins||maxSpins>100||!Number.isFinite(spinCost)||spinCost<0) return fail('Проверь общее количество прокруток, бесплатные попытки и цену');
-      settings.freeSpins=freeSpins; settings.maxSpins=maxSpins; settings.spinCost=Math.floor(spinCost);
+      if(Number(settings.freeSpins)!==freeSpins) settings.freeSpinsVersion=Number(settings.freeSpinsVersion||0)+1; settings.freeSpins=freeSpins; settings.maxSpins=maxSpins; settings.spinCost=Math.floor(spinCost);
       if(body.referrerReward!==undefined) settings.referrerReward=Math.max(0,Math.floor(Number(body.referrerReward)));
       if(body.inviteeReward!==undefined) settings.inviteeReward=Math.max(0,Math.floor(Number(body.inviteeReward)));
       if(Array.isArray(body.catalog)) for(const x of body.catalog){const item=settings.catalog.find(y=>y.name===x.name);if(item){if(!Number.isFinite(Number(x.cost))||Number(x.cost)<0||!Number.isFinite(Number(x.stock))||Number(x.stock)<0)return fail('Цена и остаток должны быть неотрицательными числами');item.cost=Math.floor(Number(x.cost));item.stock=Math.floor(Number(x.stock));}}
