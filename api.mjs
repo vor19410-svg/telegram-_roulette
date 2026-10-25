@@ -138,11 +138,16 @@ async function processReferral(state, startParam){
 }
 async function verifyChannelMembership(userId){
   if(!BOT_TOKEN) throw new Error('На Render не задан TELEGRAM_BOT_TOKEN');
-  const channel=String(process.env.TELEGRAM_CHANNEL_ID||'').trim();
-  if(!channel) throw new Error('На Render не задан TELEGRAM_CHANNEL_ID');
+  // TELEGRAM_CHANNEL_ID is optional: use the public channel username from TELEGRAM_CHANNEL_URL.
+  // A numeric ID is only needed for private channels or when no public username is available.
+  const configuredId=String(process.env.TELEGRAM_CHANNEL_ID||'').trim();
+  const channelUrl=String(process.env.TELEGRAM_CHANNEL_URL||'').trim();
+  const usernameMatch=channelUrl.match(/(?:https?:\/\/)?t\.me\/([A-Za-z0-9_]+)/i);
+  const channel=configuredId || (usernameMatch ? '@'+usernameMatch[1] : '');
+  if(!channel) throw new Error('Укажи публичную ссылку канала в TELEGRAM_CHANNEL_URL (например, https://t.me/имя_канала).');
   const resp=await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/getChatMember?chat_id=${encodeURIComponent(channel)}&user_id=${encodeURIComponent(userId)}`);
   const data=await resp.json();
-  if(!data.ok) throw new Error('Не удалось проверить подписку. Проверь TELEGRAM_CHANNEL_ID и права бота.');
+  if(!data.ok) throw new Error('Не удалось проверить подписку. Проверь TELEGRAM_CHANNEL_URL и права бота администратора канала.');
   return ['creator','administrator','member'].includes(data.result?.status) || (data.result?.status==='restricted' && data.result?.is_member===true);
 }
 async function completeReferral(state){
