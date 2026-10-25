@@ -169,18 +169,19 @@ export default async function(req){
     const body=authResult.body;
     const state=await getUser(user);
 
-    if(action==='state'){await processReferral(state, body.startParam);const settings=await getSettings();const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;}state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-Number(state.freeSpinsUsed||0));await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id),botUsername:BOT_USERNAME,channelUrl:process.env.TELEGRAM_CHANNEL_URL||''});}
+    if(action==='state'){await processReferral(state, body.startParam);const settings=await getSettings();const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;state.totalSpinsToday=0;}state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-Number(state.freeSpinsUsed||0));state.maxSpins=Number(settings.maxSpins??10);await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id),botUsername:BOT_USERNAME,channelUrl:process.env.TELEGRAM_CHANNEL_URL||'',catalog:settings.catalog,rewards:settings.rewards,settings:{freeSpins:settings.freeSpins,maxSpins:settings.maxSpins,spinCost:settings.spinCost}});}
 
 
     if(action==='task'){
       const {id}=body;
       if(id!=='channel') return fail('Неизвестное задание');
-      if(state.tasks[id]) return fail('Это задание уже выполнено');
       const isMember=await verifyChannelMembership(user.id);
       if(!isMember) return fail('Подпишись на канал и нажми «Проверить подписку»');
-      state.tasks[id]=true; state.coins+=50; state.earned+=50;
-      await completeReferral(state);
-      await putUser(state); return json({ok:true,state,message:'✅ Подписка проверена: +50 монет'});
+      let taskRewarded=false;
+      if(!state.tasks[id]){state.tasks[id]=true;state.coins=Number(state.coins||0)+50;state.earned=Number(state.earned||0)+50;taskRewarded=true;}
+      const referralRewarded=await completeReferral(state);
+      await putUser(state);
+      return json({ok:true,state,message:taskRewarded?(referralRewarded?'✅ Подписка проверена: +50 монет за задание и реферальная награда начислена.':'✅ Подписка проверена: +50 монет'):(referralRewarded?'✅ Реферальная награда начислена.':'Это задание уже выполнено; подписка подтверждена.')});
     }
 
     if(action==='spin'){
@@ -237,8 +238,34 @@ export default async function(req){
       if(body.referrerReward!==undefined) settings.referrerReward=Math.max(0,Math.floor(Number(body.referrerReward)));
       if(body.inviteeReward!==undefined) settings.inviteeReward=Math.max(0,Math.floor(Number(body.inviteeReward)));
       if(Array.isArray(body.catalog)) for(const x of body.catalog){const item=settings.catalog.find(y=>y.name===x.name);if(item){if(!Number.isFinite(Number(x.cost))||Number(x.cost)<0||!Number.isFinite(Number(x.stock))||Number(x.stock)<0)return fail('Цена и остаток должны быть неотрицательными числами');item.cost=Math.floor(Number(x.cost));item.stock=Math.floor(Number(x.stock));}}
-      if(Array.isArray(body.probabilities)){const total=body.probabilities.reduce((a,x)=>a+Number(x.p),0);if(body.probabilities.some(x=>!Number.isFinite(Number(x.p))||Number(x.p)<0)||total<=0)return fail('Вероятности должны быть неотрицательными, сумма больше нуля');for(const x of body.probabilities){const r=settings.rewards.find(y=>y.name===x.name);if(r)r.p=Number(x.p);}}
+      if(Array.isArray(body.probabilities)){const total=body.probabilities.reduce((a,x)=>a+Number(x.p),0);if(body.probabilities.some(x=>!Number.isFinite(Number(x.p))||Number(x.p)<0||Number(x.p)>100)||Math.abs(total-100)>0.11)return fail('Сумма вероятностей должна быть ровно 100% (допуск 0,1%).');for(const x of body.probabilities){const r=settings.rewards.find(y=>y.name===x.name);if(r)r.p=Number(x.p);}}
       await settingsStore().setJSON('main',settings); return json({ok:true,settings});
+    }
+    if(action==='admin-users'){
+      if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
+      const db=await readDb('users');
+      const list=Object.values(db).map(x=>({telegramId:String(x.telegramId),username:String(x.username||'Без имени'),coins:Number(x.coins||0),earned:Number(x.earned||0),refs:Number(x.refs||0),refEarned:Number(x.refEarned||0)})).sort((a,b)=>b.coins-a.coins);
+      return json({ok:true,users:list});
+    }
+    if(action==='admin-adjust-coins'){
+      if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
+      const targetId=String(body.telegramId||''); const delta=Number(body.delta);
+      if(!/^\d{3,20}$/.test(targetId)||!Number.isInteger(delta)||Math.abs(delta)>100000000) return fail('Проверь Telegram ID и число монет');
+      const target=await users().get(targetId,{type:'json'}); if(!target)return fail('Пользователь не найден');
+      target.coins=Math.max(0,Number(target.coins||0)+delta); if(delta>0)target.earned=Number(target.earned||0)+delta; await putUser(target); return json({ok:true,user:{telegramId:targetId,coins:target.coins}});
+    }
+    if(action==='admin-grant-all'){
+      if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
+      const amount=Number(body.amount??150); if(!Number.isInteger(amount)||amount<0||amount>1000000)return fail('Некорректная сумма');
+      const db=await readDb('users'); let count=0;
+      for(const [id,u] of Object.entries(db)){u.coins=Number(u.coins||0)+amount;u.earned=Number(u.earned||0)+amount;db[id]=u;count++;}
+      await writeDb('users',db); return json({ok:true,count,amount});
+    }
+    if(action==='admin-stats'){
+      if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
+      const udb=await readDb('users'), cdb=await readDb('codes'), rdb=await readDb('referrals');
+      const today=Date.now()-DAY;
+      return json({ok:true,stats:{users:Object.keys(udb).length,codes:Object.keys(cdb).length,referrals:Object.values(rdb).filter(x=>x.status==='completed').length,pendingReferrals:Object.values(rdb).filter(x=>x.status==='pending').length,coins:Object.values(udb).reduce((n,x)=>n+Number(x.coins||0),0)}});
     }
     if(action==='admin-codes'){
       if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
