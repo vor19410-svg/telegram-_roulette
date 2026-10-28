@@ -314,23 +314,38 @@ export default async function(req){
     }
 
     if(action==='exchange'){
-      const name=String(body.name||''); const quantity=Number(body.quantity??1); const settings=await getSettings();
-      const item=settings.catalog.find(x=>x.name===name); if(!item)return fail('Эта награда недоступна для обмена');
-      if(!Number.isInteger(quantity)||quantity<1||quantity>100)return fail('Количество должно быть от 1 до 100');
-      const unitCost=Number(item.cost); const totalCost=unitCost*quantity;
-      if(!Number.isFinite(unitCost)||unitCost<0)return fail('Некорректная цена награды');
-      if(state.coins<totalCost)return fail(`Недостаточно монет. Нужно ${totalCost}`);
-      const remaining=Number(item.stock ?? await getStock(name)); if(remaining<quantity)return fail(`Недостаточно товара на складе. Осталось: ${remaining}`);
-      state.coins-=totalCost; item.stock=remaining-quantity; await settingsStore().setJSON('main',settings);
-      const issued=await createCode(state,name);
-      issued.quantity=quantity;
-      await codes().setJSON(issued.id,issued);
-      await notifyAdmin(issued);
-      const date=new Date().toLocaleString('ru-RU');
-      state.inventory.unshift({name,icon:item.icon,date,quantity,code:issued.code});
-      state.history.unshift({name:`Обмен: ${name} ×${quantity}`,icon:item.icon,date,quantity,code:issued.code});
-      await putUser(state);
-      return json({ok:true,state,code:issued,remaining:item.stock,totalCost,quantity});
+      return await withUserLock(user.id, async()=>{
+        // Always reload the latest balance so a stale client state cannot block or overwrite an exchange.
+        const freshState=await getUser(user);
+        const name=String(body.name||'');
+        const quantity=Number(body.quantity??1);
+        if(!Number.isInteger(quantity)||quantity<1||quantity>100) return fail('Количество должно быть от 1 до 100');
+        const settings=await getSettings();
+        if(!Array.isArray(settings.catalog)) return fail('Каталог обмена не настроен',500);
+        const item=settings.catalog.find(x=>String(x.name)===name);
+        if(!item) return fail('Эта награда недоступна для обмена. Обнови приложение и попробуй снова.');
+        const unitCost=Number(item.cost);
+        const totalCost=unitCost*quantity;
+        if(!Number.isFinite(unitCost)||unitCost<0) return fail('Некорректная цена награды',500);
+        if(Number(freshState.coins||0)<totalCost) return fail(`Недостаточно монет. Нужно ${totalCost}, у тебя ${Number(freshState.coins||0)}`);
+        const remaining=Number(item.stock ?? await getStock(name));
+        if(!Number.isFinite(remaining)||remaining<quantity) return fail(`Недостаточно товара на складе. Осталось: ${Number.isFinite(remaining)?remaining:0}`);
+        // Persist a single code that represents the full quantity.
+        const issued=await createCode(freshState,name);
+        issued.quantity=quantity;
+        await codes().setJSON(issued.id,issued);
+        freshState.coins=Number(freshState.coins||0)-totalCost;
+        item.stock=remaining-quantity;
+        await settingsStore().setJSON('main',settings);
+        const date=new Date().toLocaleString('ru-RU');
+        if(!Array.isArray(freshState.inventory)) freshState.inventory=[];
+        if(!Array.isArray(freshState.history)) freshState.history=[];
+        freshState.inventory.unshift({name,icon:item.icon||'🎁',date,quantity,code:issued.code});
+        freshState.history.unshift({name:`Обмен: ${name} ×${quantity}`,icon:item.icon||'🎁',date,quantity,code:issued.code});
+        await putUser(freshState);
+        await notifyAdmin(issued);
+        return json({ok:true,state:publicState(freshState),code:issued,remaining:item.stock,totalCost,quantity});
+      });
     }
 
     if(action==='admin-settings'){
