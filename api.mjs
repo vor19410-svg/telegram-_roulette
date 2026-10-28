@@ -154,7 +154,7 @@ async function createCode(state,prize){
 async function notifyAdmin(item){
   if(!BOT_TOKEN||!ADMIN_ID) return;
   try{
-    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:ADMIN_ID,text:`🎁 Elite Force\nНовый код\n\nПриз: ${item.prize}\nКод: ${item.code}\nПользователь: ${item.username}\nTelegram ID: ${item.telegramId}\nВыдан: ${item.date}\nДействует до: ${new Date(item.expiresAt).toLocaleDateString('ru-RU')}`})});
+    await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({chat_id:ADMIN_ID,text:`🎁 Elite Force\nНовый код\n\nПриз: ${item.prize}\nКоличество: ${Number(item.quantity||1)} шт.\nКод: ${item.code}\nПользователь: ${item.username}\nTelegram ID: ${item.telegramId}\nВыдан: ${item.date}\nДействует до: ${new Date(item.expiresAt).toLocaleDateString('ru-RU')}`})});
   }catch{}
 }
 function pickIndex(probabilities=rewards){ const total=probabilities.reduce((a,r)=>a+Number(r.p||0),0); if(total<=0)return rewards.length-1; let x=Math.random()*total; for(let i=0;i<probabilities.length;i++){x-=Number(probabilities[i].p||0);if(x<0)return i} return probabilities.length-1; }
@@ -314,16 +314,23 @@ export default async function(req){
     }
 
     if(action==='exchange'){
-      const name=String(body.name||''); const settings=await getSettings();
+      const name=String(body.name||''); const quantity=Number(body.quantity??1); const settings=await getSettings();
       const item=settings.catalog.find(x=>x.name===name); if(!item)return fail('Эта награда недоступна для обмена');
-      if(state.coins<Number(item.cost))return fail('Недостаточно монет');
-      const remaining=Number(item.stock ?? await getStock(name)); if(remaining<=0)return fail('Эта награда закончилась. Попробуй позже.');
-      state.coins-=Number(item.cost); item.stock=remaining-1; await settingsStore().setJSON('main',settings);
-      const code=await createCode(state,name); await notifyAdmin(code);
-      state.inventory.unshift({name,icon:item.icon,date:new Date().toLocaleString('ru-RU'),quantity:1,code:code.code});
-      state.history.unshift({name:'Обмен: '+name,icon:item.icon,date:new Date().toLocaleString('ru-RU'),code:code.code});
+      if(!Number.isInteger(quantity)||quantity<1||quantity>100)return fail('Количество должно быть от 1 до 100');
+      const unitCost=Number(item.cost); const totalCost=unitCost*quantity;
+      if(!Number.isFinite(unitCost)||unitCost<0)return fail('Некорректная цена награды');
+      if(state.coins<totalCost)return fail(`Недостаточно монет. Нужно ${totalCost}`);
+      const remaining=Number(item.stock ?? await getStock(name)); if(remaining<quantity)return fail(`Недостаточно товара на складе. Осталось: ${remaining}`);
+      state.coins-=totalCost; item.stock=remaining-quantity; await settingsStore().setJSON('main',settings);
+      const issued=await createCode(state,name);
+      issued.quantity=quantity;
+      await codes().setJSON(issued.id,issued);
+      await notifyAdmin(issued);
+      const date=new Date().toLocaleString('ru-RU');
+      state.inventory.unshift({name,icon:item.icon,date,quantity,code:issued.code});
+      state.history.unshift({name:`Обмен: ${name} ×${quantity}`,icon:item.icon,date,quantity,code:issued.code});
       await putUser(state);
-      return json({ok:true,state,code,remaining:remaining-1});
+      return json({ok:true,state,code:issued,remaining:item.stock,totalCost,quantity});
     }
 
     if(action==='admin-settings'){
@@ -354,35 +361,6 @@ export default async function(req){
       if(!/^\d{3,20}$/.test(targetId)||!Number.isInteger(delta)||Math.abs(delta)>100000000) return fail('Проверь Telegram ID и число монет');
       const target=await users().get(targetId,{type:'json'}); if(!target)return fail('Пользователь не найден');
       target.coins=Math.max(0,Number(target.coins||0)+delta); if(delta>0)target.earned=Number(target.earned||0)+delta; await putUser(target); return json({ok:true,user:{telegramId:targetId,coins:target.coins}});
-    }
-    if(action==='admin-adjust-spins'){
-      if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
-      const identifier=String(body.identifier||'').trim();
-      const mode=String(body.mode||'grant');
-      const amount=Number(body.amount??0);
-      if(!identifier) return fail('Введи Telegram ID или username');
-      if(!['grant','set','reset'].includes(mode)) return fail('Неизвестное действие');
-      if(mode!=='reset' && (!Number.isInteger(amount)||amount<0||amount>10000)) return fail('Количество прокруток должно быть от 0 до 10000');
-      const db=await readDb('users');
-      let targetId='';
-      if(/^\d{3,20}$/.test(identifier) && db[identifier]) targetId=identifier;
-      else {
-        const wanted=identifier.replace(/^@/,'').toLowerCase();
-        const matches=Object.entries(db).filter(([id,u])=>String(u.username||'').replace(/^@/,'').toLowerCase()===wanted);
-        if(matches.length===1) targetId=matches[0][0];
-        else if(matches.length>1) return fail('Найдено несколько пользователей с таким username. Используй Telegram ID.');
-      }
-      if(!targetId) return fail('Пользователь не найден. Он должен хотя бы один раз открыть приложение.');
-      const target=db[targetId];
-      const today=new Date().toISOString().slice(0,10);
-      // Do not clear bonusSpins here: admin-granted spins persist until used.
-      if(target.spinDay!==today){target.spinDay=today;target.freeSpinsUsed=0;target.totalSpinsToday=0;}
-      if(mode==='grant') target.bonusSpins=Math.min(10000,Number(target.bonusSpins||0)+amount);
-      if(mode==='set') target.bonusSpins=amount;
-      if(mode==='reset'){target.freeSpinsUsed=0;target.totalSpinsToday=0;}
-      target.freeSpinsLeft=Math.max(0,Number((await getSettings()).freeSpins||0)-Number(target.freeSpinsUsed||0))+Number(target.bonusSpins||0);
-      await putUser(target);
-      return json({ok:true,message:mode==='reset'?'Счётчик прокруток на сегодня сброшен':`Оставшиеся дополнительные прокрутки: ${target.bonusSpins}`,user:{telegramId:targetId,username:target.username,bonusSpins:target.bonusSpins,totalSpinsToday:Number(target.totalSpinsToday||0),freeSpinsUsed:Number(target.freeSpinsUsed||0)}});
     }
     if(action==='admin-grant-all'){
       if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
