@@ -14,6 +14,7 @@ const rewards = [
   {name:'Шлем',icon:'🪖',type:'item',p:3},
   {name:'Броня',icon:'🦺',type:'item',p:2},
   {name:'Сумка',icon:'🎒',type:'item',p:3},
+  {name:'Двойная награда',icon:'✖️',type:'special',p:1},
   {name:'50 монет',icon:'🪙',type:'coins',value:50,p:35},
   {name:'100 монет',icon:'🪙',type:'coins',value:100,p:25},
   {name:'200 монет',icon:'💰',type:'coins',value:200,p:10},
@@ -50,10 +51,30 @@ async function writeDb(name, db) {
   await fs.writeFile(tmp,JSON.stringify(db,null,2));
   await fs.rename(tmp,target);
 }
+// Serialize updates per JSON database so simultaneous requests from different
+// players cannot overwrite each other's changes when the whole file is rewritten.
+const dbWriteQueues = new Map();
+async function withDbWriteLock(name, fn) {
+  const previous = dbWriteQueues.get(name) || Promise.resolve();
+  let release;
+  const current = new Promise(resolve => { release = resolve; });
+  const queued = previous.then(() => current);
+  dbWriteQueues.set(name, queued);
+  await previous;
+  try { return await fn(); }
+  finally { release(); if (dbWriteQueues.get(name) === queued) dbWriteQueues.delete(name); }
+}
 function makeStore(name) {
  return {
   async get(key, opts={}) { const db=await readDb(name); return db[key] ?? null; },
-  async setJSON(key, value, opts={}) { const db=await readDb(name); if(opts.onlyIfNew && key in db) return; db[key]=value; await writeDb(name,db); },
+  async setJSON(key, value, opts={}) {
+    return withDbWriteLock(name, async () => {
+      const db=await readDb(name);
+      if(opts.onlyIfNew && key in db) return;
+      db[key]=value;
+      await writeDb(name,db);
+    });
+  },
   async *list() { const db=await readDb(name); yield {blobs:Object.keys(db).map(key=>({key}))}; }
  };
 }
@@ -62,7 +83,16 @@ const codes = () => makeStore('codes');
 const stockStore = () => makeStore('stock');
 const settingsStore = () => makeStore('settings');
 const DEFAULT_SETTINGS = {referrerReward:70, inviteeReward:35, freeSpins:3,maxSpins:10,spinCost:100,catalog: Object.entries({'FULL 6':{cost:10000,icon:'🥷'},'Пушка':{cost:5000,icon:'🔫'},'30 UC':{cost:1800,icon:'🎮'},'60 UC':{cost:3500,icon:'💎'},'Шлем':{cost:1200,icon:'🪖'},'Броня':{cost:1500,icon:'🦺'},'Сумка':{cost:1000,icon:'🎒'}}).map(([name,v])=>({name,...v,stock:100})), rewards: rewards.map(r=>({name:r.name,icon:r.icon,p:r.p}))};
-async function getSettings(){const s=await settingsStore().get('main',{type:'json'});return s||structuredClone(DEFAULT_SETTINGS)}
+async function getSettings(){
+  const s=await settingsStore().get('main',{type:'json'});
+  if(!s) return structuredClone(DEFAULT_SETTINGS);
+  // Add newly introduced rewards to existing settings without overwriting admin edits.
+  if(!Array.isArray(s.rewards)) s.rewards=[];
+  for(const r of DEFAULT_SETTINGS.rewards){
+    if(!s.rewards.some(x=>x.name===r.name)) s.rewards.push({...r});
+  }
+  return s;
+}
 const exchangeCatalog = { 'FULL 6':{cost:10000,icon:'🥷'}, 'Пушка':{cost:5000,icon:'🔫'}, '30 UC':{cost:1800,icon:'🎮'}, '60 UC':{cost:3500,icon:'💎'}, 'Шлем':{cost:1200,icon:'🪖'}, 'Броня':{cost:1500,icon:'🦺'}, 'Сумка':{cost:1000,icon:'🎒'} };
 async function getStock(name){ const st=stockStore(); let n=await st.get(name,{type:'json'}); if(n===null){n=100; await st.setJSON(name,n,{onlyIfNew:true});} return Number(n); }
 async function setStock(name,n){ await stockStore().setJSON(name,Math.max(0,n)); }
@@ -98,7 +128,7 @@ function validateInitData(initData){
 }
 
 function defaultState(user){
-  return {telegramId:String(user.id),username:user.username?`@${user.username}`:(user.first_name||'@EliteForcePlayer'),coins:0,earned:0,lastSpin:0,spinDay:'',freeSpinsUsed:0,lastDaily:0,inventory:[],history:[],wins:0,spins:0,streak:1,tasks:{},refs:0,completedFriends:0,refEarned:0,friendTasks:0,doubleNext:false};
+  return {telegramId:String(user.id),username:user.username?`@${user.username}`:(user.first_name||'@EliteForcePlayer'),coins:0,earned:0,lastSpin:0,spinDay:'',freeSpinsUsed:0,bonusSpins:0,bonusSpinsDay:'',lastDaily:0,inventory:[],history:[],wins:0,spins:0,streak:1,tasks:{},refs:0,completedFriends:0,refEarned:0,friendTasks:0,doubleNext:false};
 }
 async function getUser(user){
   const store=users();
@@ -187,7 +217,7 @@ export default async function(req){
     const body=authResult.body;
     const state=await getUser(user);
 
-    if(action==='state'){await processReferral(state, body.startParam);const settings=await getSettings();const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;state.totalSpinsToday=0;}if(Number(state.freeSpinsConfigVersion??-1)!==Number(settings.freeSpinsVersion??0)){state.freeSpinsUsed=0;state.freeSpinsConfigVersion=Number(settings.freeSpinsVersion??0);}state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-Number(state.freeSpinsUsed||0));state.maxSpins=Number(settings.maxSpins??10);await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id),botUsername:BOT_USERNAME,channelUrl:process.env.TELEGRAM_CHANNEL_URL||'',catalog:settings.catalog,rewards:settings.rewards,settings:{freeSpins:settings.freeSpins,maxSpins:settings.maxSpins,spinCost:settings.spinCost}});}
+    if(action==='state'){await processReferral(state, body.startParam);const settings=await getSettings();const today=new Date().toISOString().slice(0,10);if(state.spinDay!==today){state.spinDay=today;state.freeSpinsUsed=0;state.totalSpinsToday=0;}/* Bonus spins persist until used. */ if(Number(state.freeSpinsConfigVersion??-1)!==Number(settings.freeSpinsVersion??0)){state.freeSpinsUsed=0;state.freeSpinsConfigVersion=Number(settings.freeSpinsVersion??0);}state.bonusSpins=Math.max(0,Number(state.bonusSpins||0));state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)+state.bonusSpins-Number(state.freeSpinsUsed||0));state.maxSpins=Number(settings.maxSpins??10)+state.bonusSpins;await putUser(state);return json({ok:true,state:publicState(state),isAdmin:ADMIN_ID===String(user.id),botUsername:BOT_USERNAME,channelUrl:process.env.TELEGRAM_CHANNEL_URL||'',catalog:settings.catalog,rewards:settings.rewards,settings:{freeSpins:settings.freeSpins,maxSpins:settings.maxSpins,spinCost:settings.spinCost}});}
 
 
     if(action==='daily-reward'){
@@ -236,18 +266,40 @@ export default async function(req){
       const settings=await getSettings(); const now=Date.now();
       const dayKey=new Date(now).toISOString().slice(0,10);
       if(state.spinDay!==dayKey){state.spinDay=dayKey;state.freeSpinsUsed=0;state.totalSpinsToday=0;}
+      // Admin-granted bonus spins do not expire at midnight; consume them only when used.
       if(Number(state.freeSpinsConfigVersion??-1)!==Number(settings.freeSpinsVersion??0)){state.freeSpinsUsed=0;state.freeSpinsConfigVersion=Number(settings.freeSpinsVersion??0);}
+      state.bonusSpins=Math.max(0,Number(state.bonusSpins||0));
       state.freeSpinsUsed=Number(state.freeSpinsUsed||0);
       state.totalSpinsToday=Number(state.totalSpinsToday||0);
-      if(state.totalSpinsToday>=Number(settings.maxSpins??10)) return fail(`Достигнут лимит ${Number(settings.maxSpins??10)} прокруток в день`);
-      const free=state.freeSpinsUsed<Number(settings.freeSpins);
-      if(!free && state.coins<Number(settings.spinCost)) return fail(`Нужно ${settings.spinCost} монет для повторного прокрута`);
-      if(free) state.freeSpinsUsed++; else state.coins-=Number(settings.spinCost);
+      const dailyLimit=Number(settings.maxSpins??10);
+      const dailyFreeLeft=Math.max(0,Number(settings.freeSpins)-state.freeSpinsUsed);
+      let spinPayment='';
+      if(dailyFreeLeft>0){
+        state.freeSpinsUsed++;
+        spinPayment='daily-free';
+      } else if(state.bonusSpins>0){
+        state.bonusSpins--;
+        spinPayment='bonus';
+      } else if(state.totalSpinsToday<dailyLimit){
+        if(state.coins<Number(settings.spinCost)) return fail(`Нужно ${settings.spinCost} монет для повторного прокрута`);
+        state.coins-=Number(settings.spinCost);
+        spinPayment='coins';
+      } else {
+        return fail(`Достигнут дневной лимит ${dailyLimit} прокруток. Дополнительных прокруток больше нет.`);
+      }
       state.totalSpinsToday++;
-      state.lastSpin=now; state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-state.freeSpinsUsed); state.spins++;
+      state.lastSpin=now;
+      state.freeSpinsLeft=Math.max(0,Number(settings.freeSpins)-Number(state.freeSpinsUsed||0))+Number(state.bonusSpins||0);
+      state.maxSpins=dailyLimit+Number(state.bonusSpins||0);
+      state.spins++;
       const weighted=settings.rewards; const idx=pickIndex(weighted); const r=rewards.find(x=>x.name===weighted[idx]?.name)||rewards[rewards.length-1];
       let multiplier=1;
-      if(state.doubleNext && r.name!=='Двойная награда'){multiplier=2;state.doubleNext=false}
+      const isUC = /\bUC\b/i.test(r.name);
+      if(state.doubleNext && r.name!=='Двойная награда'){
+        // The next spin consumes the effect, but UC prizes are never doubled.
+        if(!isUC) multiplier=2;
+        state.doubleNext=false;
+      }
       if(r.name==='Двойная награда') state.doubleNext=true;
       let code=null;
       if(r.type==='coins'){const amount=r.value*multiplier;state.coins+=amount;state.earned+=amount}
@@ -302,6 +354,35 @@ export default async function(req){
       if(!/^\d{3,20}$/.test(targetId)||!Number.isInteger(delta)||Math.abs(delta)>100000000) return fail('Проверь Telegram ID и число монет');
       const target=await users().get(targetId,{type:'json'}); if(!target)return fail('Пользователь не найден');
       target.coins=Math.max(0,Number(target.coins||0)+delta); if(delta>0)target.earned=Number(target.earned||0)+delta; await putUser(target); return json({ok:true,user:{telegramId:targetId,coins:target.coins}});
+    }
+    if(action==='admin-adjust-spins'){
+      if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
+      const identifier=String(body.identifier||'').trim();
+      const mode=String(body.mode||'grant');
+      const amount=Number(body.amount??0);
+      if(!identifier) return fail('Введи Telegram ID или username');
+      if(!['grant','set','reset'].includes(mode)) return fail('Неизвестное действие');
+      if(mode!=='reset' && (!Number.isInteger(amount)||amount<0||amount>10000)) return fail('Количество прокруток должно быть от 0 до 10000');
+      const db=await readDb('users');
+      let targetId='';
+      if(/^\d{3,20}$/.test(identifier) && db[identifier]) targetId=identifier;
+      else {
+        const wanted=identifier.replace(/^@/,'').toLowerCase();
+        const matches=Object.entries(db).filter(([id,u])=>String(u.username||'').replace(/^@/,'').toLowerCase()===wanted);
+        if(matches.length===1) targetId=matches[0][0];
+        else if(matches.length>1) return fail('Найдено несколько пользователей с таким username. Используй Telegram ID.');
+      }
+      if(!targetId) return fail('Пользователь не найден. Он должен хотя бы один раз открыть приложение.');
+      const target=db[targetId];
+      const today=new Date().toISOString().slice(0,10);
+      // Do not clear bonusSpins here: admin-granted spins persist until used.
+      if(target.spinDay!==today){target.spinDay=today;target.freeSpinsUsed=0;target.totalSpinsToday=0;}
+      if(mode==='grant') target.bonusSpins=Math.min(10000,Number(target.bonusSpins||0)+amount);
+      if(mode==='set') target.bonusSpins=amount;
+      if(mode==='reset'){target.freeSpinsUsed=0;target.totalSpinsToday=0;}
+      target.freeSpinsLeft=Math.max(0,Number((await getSettings()).freeSpins||0)-Number(target.freeSpinsUsed||0))+Number(target.bonusSpins||0);
+      await putUser(target);
+      return json({ok:true,message:mode==='reset'?'Счётчик прокруток на сегодня сброшен':`Оставшиеся дополнительные прокрутки: ${target.bonusSpins}`,user:{telegramId:targetId,username:target.username,bonusSpins:target.bonusSpins,totalSpinsToday:Number(target.totalSpinsToday||0),freeSpinsUsed:Number(target.freeSpinsUsed||0)}});
     }
     if(action==='admin-grant-all'){
       if(ADMIN_ID!==String(user.id)) return fail('Доступ запрещён',403);
